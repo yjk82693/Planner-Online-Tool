@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+
+  mandalGoal     MandalGoal?
+  todos          Todo[]
+  courses        Course[]
+  shopItems      ShopItem[]
+  pointLogs      PointLog[]
+  dailyLogs      DailyLog[]
+  importantDates ImportantDate[]
+}
+
+model MandalGoal {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  mainGoal  String   @default("")
+  subGoals  String   @default("[]")
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Todo {
+  id        String   @id @default(cuid())
+  userId    String
+  text      String
+  completed Boolean  @default(false)
+  priority  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Course {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  category    String   @default("academic")
+  status      String   @default("in-progress")
+  assignments String   @default("[]")
+  contents    String   @default("[]")
+  reviews     String   @default("[]")
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model ShopItem {
+  id     String @id @default(cuid())
+  userId String
+  name   String
+  cost   Int
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model PointLog {
+  id     String @id @default(cuid())
+  userId String
+  date   String
+  points Int
+  type   String
+  reason String
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model DailyLog {
+  id           String   @id @default(cuid())
+  userId       String
+  date         String
+  tasks        String   @default("[]")
+  pointsEarned Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model ImportantDate {
+  id          String @id @default(cuid())
+  userId      String
+  title       String
+  date        String
+  description String @default("")
+  warningDays Int    @default(7)
+
+  user User @relation(fields: [userId], references: [id])
+}
