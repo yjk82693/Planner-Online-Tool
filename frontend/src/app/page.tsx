@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Layout, Menu, Typography, Badge, Modal } from "antd";
+import { Layout, Menu, Typography, Badge, Modal, Button } from "antd";
+import { useRouter } from "next/navigation";
 import { usePlanner } from "@/hooks/usePlanner";
+import { clearToken } from "@/lib/auth";
 import MandalGrid from "@/components/mandal/MandalGrid";
 import MandalEditor from "@/components/mandal/MandalEditor";
 import Shop from "@/components/rewards/Shop";
@@ -17,6 +19,7 @@ const { Title, Text } = Typography;
 type Tab = "edit" | "mandal" | "todo" | "courses" | "dates" | "shop" | "tracker";
 
 export default function Home() {
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("edit");
   const [warningShown, setWarningShown] = useState(false);
   const {
@@ -129,8 +132,18 @@ export default function Home() {
           onClick={({ key }) => setTab(key as Tab)}
           style={{ borderRight: "none", flex: 1 }}
         />
-        <div style={{ padding: "16px" }}>
+        <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "8px" }}>
           <Badge color="gold" text={<Text strong>{state.totalPoints} C$</Text>} />
+          <Button
+            size="small"
+            block
+            onClick={() => {
+              clearToken();
+              router.push("/auth/login");
+            }}
+          >
+            Logout
+          </Button>
         </div>
       </Sider>
 
