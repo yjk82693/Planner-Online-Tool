@@ -21,6 +21,7 @@ export default function Home() {
   const [warningShown, setWarningShown] = useState(false);
   const {
     state,
+    loading,
     setMainGoal,
     setSubGoalTitle,
     setTaskText,
@@ -102,6 +103,14 @@ export default function Home() {
     shop: "Reward shop",
     tracker: "Point tracker",
   };
+
+  if (loading) {
+    return (
+      <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Text type="secondary">Loading...</Text>
+      </div>
+    );
+  }
 
   return (
     <Layout style={{ height: "100vh", overflow: "hidden" }}>

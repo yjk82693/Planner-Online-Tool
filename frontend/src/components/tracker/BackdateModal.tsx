@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Modal, Button, Typography, Checkbox, Tag, Input, InputNumber } from "antd";
 import dayjs, { Dayjs } from "dayjs";
 import { DatePicker } from "antd";
-import { MandalData } from "@/types/mandal";
+import { MandalData, ShopItem } from "@/types/mandal";
 import { DailyLog, DailyTaskRecord } from "@/types/dailyLog";
 import { isFuture, isToday, formatDisplayDate } from "@/lib/dateUtils";
 
@@ -19,17 +19,19 @@ interface SpentItem {
 interface Props {
   open: boolean;
   mandal: MandalData;
+  shopItems: ShopItem[];
   existingLogs: DailyLog[];
   onSave: (log: DailyLog, spentItems: { reason: string; points: number }[]) => void;
   onClose: () => void;
 }
 
-export default function BackdateModal({ open, mandal, existingLogs, onSave, onClose }: Props) {
+export default function BackdateModal({ open, mandal, shopItems, existingLogs, onSave, onClose }: Props) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [spentItems, setSpentItems] = useState<SpentItem[]>([]);
   const [spentReason, setSpentReason] = useState("");
   const [spentPoints, setSpentPoints] = useState<number | null>(null);
+  const [customReason, setCustomReason] = useState("");
 
   const handleDateChange = (date: Dayjs | null) => {
     if (!date) return;
@@ -61,12 +63,14 @@ export default function BackdateModal({ open, mandal, existingLogs, onSave, onCl
   };
 
   const addSpentItem = () => {
-    if (!spentReason.trim() || !spentPoints || spentPoints <= 0) return;
+    const reason = spentReason === "__custom__" ? customReason.trim() : spentReason;
+    if (!reason || !spentPoints || spentPoints <= 0) return;
     setSpentItems((prev) => [
       ...prev,
-      { id: Date.now().toString(), reason: spentReason.trim(), points: spentPoints },
+      { id: Date.now().toString(), reason, points: spentPoints },
     ]);
     setSpentReason("");
+    setCustomReason("");
     setSpentPoints(null);
   };
 
@@ -104,6 +108,9 @@ export default function BackdateModal({ open, mandal, existingLogs, onSave, onCl
     setSelectedDate(null);
     setChecked(new Set());
     setSpentItems([]);
+    setSpentReason("");
+    setCustomReason("");
+    setSpentPoints(null);
     onClose();
   };
 
@@ -258,32 +265,58 @@ export default function BackdateModal({ open, mandal, existingLogs, onSave, onCl
                   <Text style={{ fontSize: "12px" }}>{s.reason}</Text>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <Tag color="red">-{s.points} C$</Tag>
-                    <Button
-                      size="small"
-                      type="text"
-                      danger
-                      onClick={() => removeSpentItem(s.id)}
-                    >
-                      ✕
-                    </Button>
+                    <Button size="small" type="text" danger onClick={() => removeSpentItem(s.id)}>✕</Button>
                   </div>
                 </div>
               ))}
 
-              <div style={{ display: "flex", gap: "8px" }}>
-                <Input
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <select
                   value={spentReason}
-                  onChange={(e) => setSpentReason(e.target.value)}
-                  placeholder="What did you spend on?"
-                  style={{ flex: 2 }}
-                  onPressEnter={addSpentItem}
-                />
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSpentReason(val);
+                    if (val !== "__custom__") {
+                      const selected = shopItems.find((s) => s.name === val);
+                      if (selected) setSpentPoints(selected.cost);
+                      else setSpentPoints(null);
+                    } else {
+                      setSpentPoints(null);
+                    }
+                  }}
+                  style={{
+                    flex: 2,
+                    padding: "4px 8px",
+                    border: "1px solid #d9d9d9",
+                    borderRadius: "6px",
+                    fontSize: "13px",
+                    minWidth: "150px",
+                  }}
+                >
+                  <option value="">Select from shop...</option>
+                  {shopItems.map((item) => (
+                    <option key={item.id} value={item.name}>
+                      {item.name} ({item.cost} C$)
+                    </option>
+                  ))}
+                  <option value="__custom__">Custom...</option>
+                </select>
+
+                {spentReason === "__custom__" && (
+                  <Input
+                    value={customReason}
+                    onChange={(e) => setCustomReason(e.target.value)}
+                    placeholder="Custom reason"
+                    style={{ flex: 1, minWidth: "100px" }}
+                  />
+                )}
+
                 <InputNumber
                   value={spentPoints}
                   onChange={(val) => setSpentPoints(val)}
                   placeholder="Cost"
                   min={1}
-                  style={{ flex: 1 }}
+                  style={{ width: "80px" }}
                 />
                 <Button onClick={addSpentItem}>Add</Button>
               </div>

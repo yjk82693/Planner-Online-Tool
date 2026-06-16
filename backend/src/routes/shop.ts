@@ -24,8 +24,12 @@ router.patch("/:id", async (req: AuthRequest, res) => {
 
 router.delete("/:id", async (req: AuthRequest, res) => {
   const id = String(req.params.id);
-  await prisma.shopItem.delete({ where: { id } });
-  return res.json({ ok: true });
+  try {
+    await prisma.shopItem.delete({ where: { id } });
+    return res.json({ ok: true });
+  } catch {
+    return res.status(404).json({ error: "Item not found" });
+  }
 });
 
 export default router;

@@ -60,6 +60,11 @@ export default function PointTracker({ logs, totalPoints, state, onLogDay, onFin
     });
   };
 
+  const handleDownloadPDF = (date: string) => {
+    const dayLogs = logs.filter((l) => l.date.slice(0, 10) === date);
+    generateDailyPDF({ ...state, pointLogs: dayLogs });
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
       <div style={{ display: "flex", gap: "12px" }}>
@@ -153,9 +158,15 @@ export default function PointTracker({ logs, totalPoints, state, onLogDay, onFin
                     </Text>
                   }
                 />
-                <div style={{ display: "flex", gap: "8px" }}>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                   {earned > 0 && <Tag color="green">+{earned} C$</Tag>}
                   {spent > 0 && <Tag color="red">-{spent} C$</Tag>}
+                  <Button
+                    size="small"
+                    onClick={() => handleDownloadPDF(date)}
+                  >
+                    ↓ PDF
+                  </Button>
                 </div>
               </List.Item>
             );
@@ -166,6 +177,7 @@ export default function PointTracker({ logs, totalPoints, state, onLogDay, onFin
       <BackdateModal
         open={backdateOpen}
         mandal={state.mandal}
+        shopItems={state.shopItems}
         existingLogs={state.dailyLogs}
         onSave={onBackdate}
         onClose={() => setBackdateOpen(false)}
