@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button, List, Tag, Typography, Empty, Divider, Modal } from "antd";
 import { PointLog, PlannerState } from "@/types/mandal";
 import { DailyLog } from "@/types/dailyLog";
-import { generateDailyPDF } from "@/lib/generateDailyPDF";
+import { generateBackdatePDF, generateDailyPDF } from "@/lib/generateDailyPDF";
 import BackdateModal from "@/components/tracker/BackdateModal";
 
 const { Text } = Typography;
@@ -61,9 +61,14 @@ export default function PointTracker({ logs, totalPoints, state, onLogDay, onFin
   };
 
   const handleDownloadPDF = (date: string) => {
-    const dayLogs = logs.filter((l) => l.date.slice(0, 10) === date);
-    generateDailyPDF({ ...state, pointLogs: dayLogs });
-  };
+  console.log("downloading PDF for date:", date);
+  const todayKey = new Date().toISOString().slice(0, 10);
+  if (date === todayKey) {
+    generateDailyPDF(state);
+  } else {
+    generateBackdatePDF(state, date);
+  }
+};
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>

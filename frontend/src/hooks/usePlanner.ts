@@ -21,6 +21,8 @@ export function usePlanner() {
           api.getLogs(),
         ]);
 
+        console.log("dailyLogs from backend:", logs.dailyLogs);
+
         let shop = await api.getShop();
         if (shop.length === 0) {
           const defaults = [
