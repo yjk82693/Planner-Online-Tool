@@ -28,4 +28,17 @@ router.delete("/:id", async (req: AuthRequest, res) => {
   return res.json({ ok: true });
 });
 
+router.get("/", async (req: AuthRequest, res) => {
+  const todos = await prisma.todo.findMany({ where: { userId: req.userId! } });
+  return res.json(todos);
+});
+
+router.post("/", async (req: AuthRequest, res) => {
+  const { text, priority } = req.body;
+  const todo = await prisma.todo.create({
+    data: { userId: req.userId!, text, priority },
+  });
+  return res.json(todo);
+});
+
 export default router;

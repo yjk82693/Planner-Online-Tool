@@ -21,8 +21,6 @@ export function usePlanner() {
           api.getLogs(),
         ]);
 
-        console.log("dailyLogs from backend:", logs.dailyLogs);
-
         let shop = await api.getShop();
         if (shop.length === 0) {
           const defaults = [
@@ -35,6 +33,20 @@ export function usePlanner() {
           );
         }
 
+        // auto-remove completed todos from previous days
+        const todayKey = new Date().toISOString().slice(0, 10);
+        const staleDone = todos.filter(
+          (t: { createdAt: string; completed: boolean }) =>
+            t.createdAt.slice(0, 10) < todayKey && t.completed
+        );
+        if (staleDone.length > 0) {
+          await Promise.all(staleDone.map((t: { id: string }) => api.deleteTodo(t.id)));
+        }
+
+        const cleanTodos = todos.filter(
+          (t: { id: string }) => !staleDone.find((s: { id: string }) => s.id === t.id)
+        );
+
         setState({
           mandal: mandal.mainGoal ? mandal : DEFAULT_STATE.mandal,
           totalPoints:
@@ -46,7 +58,7 @@ export function usePlanner() {
               .reduce((s: number, l: { points: number }) => s + l.points, 0),
           pointLogs: logs.pointLogs,
           shopItems: shop,
-          todos,
+          todos: cleanTodos,
           courses,
           importantDates: dates,
           dailyLogs: logs.dailyLogs,

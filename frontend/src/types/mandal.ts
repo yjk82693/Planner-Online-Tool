@@ -1,5 +1,3 @@
-import { DailyLog } from "./dailyLog";
-
 export interface Task {
   id: string;
   text: string;
@@ -31,16 +29,15 @@ export interface ShopItem {
   cost: number;
 }
 
-// ─── To-do ───────────────────────────────────────────
 export interface TodoItem {
   id: string;
   text: string;
   completed: boolean;
-  priority: number;      // 1-3 = top priority, 0 = normal
+  priority: number;
   importantDateId?: string;
+  createdAt: string;
 }
 
-// ─── Course Tracker ──────────────────────────────────
 export type CourseCategory = "academic" | "self-study";
 export type CourseStatus = "in-progress" | "completed";
 
@@ -57,20 +54,62 @@ export interface Course {
   category: CourseCategory;
   status: CourseStatus;
   assignments: CourseAssignment[];
-  contents: string[];    // list of topics/modules
-  reviews: string[];     // review notes
+  contents: string[];
+  reviews: string[];
 }
 
-// ─── Important Dates ─────────────────────────────────
+export type Subject = "math" | "science" | "english" | "korean" | "history" | "other";
+export type Curriculum = "KR" | "SAT" | "AP" | "IB";
+
+export interface Lecture {
+  id: string;
+  title: string;
+  subject: Subject;
+  curriculum: Curriculum;
+  videoUrl: string;
+  duration: number;
+  thumbnailUrl?: string;
+}
+
+export interface LectureProgress {
+  lectureId: string;
+  watchedSeconds: number;
+  completed: boolean;
+}
+
+export interface ChatRoom {
+  id: string;
+  name: string;
+  members: string[];
+  isGroup: boolean;
+}
+
+export interface Message {
+  id: string;
+  roomId: string;
+  senderId: string;
+  content: string;
+  sentAt: string;
+}
+
+export interface Note {
+  id: string;
+  userId: string;
+  lectureId?: string;
+  title: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ImportantDate {
   id: string;
   title: string;
-  date: string;          // ISO date string
+  date: string;
   description?: string;
-  warningDays: number;   // show popup when this many days away
+  warningDays: number;
 }
 
-// add to PlannerState interface:
 export interface PlannerState {
   mandal: MandalData;
   totalPoints: number;
@@ -79,5 +118,5 @@ export interface PlannerState {
   todos: TodoItem[];
   courses: Course[];
   importantDates: ImportantDate[];
-  dailyLogs: DailyLog[];        // ← add this
+  dailyLogs: import("./dailyLog").DailyLog[];
 }
