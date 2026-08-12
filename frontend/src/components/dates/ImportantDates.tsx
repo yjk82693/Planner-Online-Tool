@@ -1,153 +1,239 @@
-"use client";
+import { useState, useMemo, useEffect } from "react";
+import { Calendar, Modal, Form, Input, InputNumber, TimePicker, Select, Badge, Button, Popconfirm, Typography } from "antd";
+import { DeleteOutlined } from "@ant-design/icons";
+import type { Dayjs } from "dayjs";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+import { getToken } from "@/lib/auth";
 
-import { useState } from "react";
-import { Button, Input, InputNumber, List, Tag, Typography, Empty, Modal } from "antd";
-import { ImportantDate } from "@/types/mandal";
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const { Text } = Typography;
+const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
-interface Props {
-  dates: ImportantDate[];
-  onAdd: (title: string, date: string, description: string, warningDays: number) => void;
-  onRemove: (id: string) => void;
+// Add/remove zones here as needed
+const TIMEZONE_OPTIONS = [
+  { value: "Asia/Seoul", label: "Seoul (KST)" },
+  { value: "America/New_York", label: "New York / State College (ET)" },
+  { value: "America/Los_Angeles", label: "Los Angeles (PT)" },
+  { value: "America/Chicago", label: "Chicago (CT)" },
+  { value: "UTC", label: "UTC" },
+];
+
+interface ImportantDate {
+  id: string;
+  title: string;
+  description?: string;
+  date: string; // "YYYY-MM-DD"
+  time?: string; // "HH:mm"
+  timezone?: string; // IANA name
+  warningDays: number;
 }
 
-function daysUntil(dateStr: string): number {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const target = new Date(dateStr);
-  return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+function authHeaders(): HeadersInit {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
+async function fetchImportantDates(): Promise<ImportantDate[]> {
+  const res = await fetch(`${BASE}/api/dates`, { headers: authHeaders() });
+  if (!res.ok) {
+    console.error("Failed to fetch important dates:", res.status, await res.text());
+    return [];
+  }
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
+async function createImportantDate(payload: Omit<ImportantDate, "id">): Promise<ImportantDate> {
+  const res = await fetch(`${BASE}/api/dates`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(payload),
   });
+  return res.json();
 }
 
-export default function ImportantDates({ dates, onAdd, onRemove }: Props) {
-  const [title, setTitle] = useState("");
-  const [date, setDate] = useState("");
-  const [description, setDescription] = useState("");
-  const [warningDays, setWarningDays] = useState<number>(7);
+async function deleteImportantDate(id: string): Promise<void> {
+  await fetch(`${BASE}/api/dates/${id}`, { method: "DELETE", headers: authHeaders() });
+}
 
-  const handleAdd = () => {
-    if (!title.trim() || !date) return;
-    onAdd(title.trim(), date, description.trim(), warningDays);
-    setTitle("");
-    setDate("");
-    setDescription("");
-    setWarningDays(7);
-  };
+// Resolves an entry to the viewer's local time, converting from whatever
+// timezone it was entered in. Falls back to plain date-only if no time given.
+function toLocalMoment(d: ImportantDate) {
+  if (!d.time || !d.timezone) return dayjs(d.date);
+  return dayjs.tz(`${d.date} ${d.time}`, "YYYY-MM-DD HH:mm", d.timezone).tz(dayjs.tz.guess());
+}
 
-  const sorted = [...dates].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-  );
+function daysLeft(d: ImportantDate) {
+  return toLocalMoment(d).startOf("day").diff(dayjs().startOf("day"), "day");
+}
 
-  const getStatus = (d: ImportantDate) => {
-    const days = daysUntil(d.date);
-    if (days < 0) return { label: "Past", color: "default" };
-    if (days === 0) return { label: "Today!", color: "red" };
-    if (days <= d.warningDays) return { label: `${days}d left`, color: "orange" };
-    return { label: `${days}d away`, color: "blue" };
-  };
+const MAX_BADGES_PER_CELL = 2;
+
+export default function ImportantDatesCalendar({
+  initialDates = [],
+}: {
+  initialDates?: ImportantDate[];
+}) {
+  const [dates, setDates] = useState<ImportantDate[]>(initialDates);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Dayjs | null>(null);
+  const [form] = Form.useForm();
+
+  useEffect(() => {
+    fetchImportantDates().then(setDates);
+  }, []);
+
+  // Group by the LOCAL (converted) day, so a 11pm ET entry that's already
+  // tomorrow morning in Seoul shows up on the correct calendar cell.
+  const byDay = useMemo(() => {
+    const map = new Map<string, ImportantDate[]>();
+    for (const d of dates) {
+      const key = toLocalMoment(d).format("YYYY-MM-DD");
+      map.set(key, [...(map.get(key) ?? []), d]);
+    }
+    return map;
+  }, [dates]);
+
+  function handleSelect(value: Dayjs) {
+    setSelectedDate(value);
+    form.resetFields();
+    form.setFieldsValue({ warningDays: 7, timezone: "Asia/Seoul" });
+    setModalOpen(true);
+  }
+
+  async function handleAdd() {
+    const values = await form.validateFields();
+    console.log("form values:", values);
+    const payload: Omit<ImportantDate, "id"> = {
+      title: values.title,
+      description: values.description,
+      date: selectedDate!.format("YYYY-MM-DD"),
+      time: values.time ? (values.time as Dayjs).format("HH:mm") : undefined,
+      timezone: values.time ? values.timezone : undefined,
+      warningDays: values.warningDays ?? 7,
+    };
+    const created = await createImportantDate(payload);
+    setDates((prev) => [...prev, created]);
+    setModalOpen(false);
+  }
+
+  async function handleRemove(id: string) {
+    await deleteImportantDate(id);
+    setDates((prev) => prev.filter((d) => d.id !== id));
+  }
+
+  function dateCellRender(value: Dayjs) {
+    const key = value.format("YYYY-MM-DD");
+    const items = byDay.get(key);
+    if (!items?.length) return null;
+    const visible = items.slice(0, MAX_BADGES_PER_CELL);
+    const overflowCount = items.length - visible.length;
+    return (
+      <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
+        {visible.map((item) => (
+          <li key={item.id} style={{ overflow: "hidden" }}>
+            <Badge
+              status="processing"
+              text={
+                <Text ellipsis style={{ maxWidth: 80, fontSize: 12 }}>
+                  {item.time ? `${toLocalMoment(item).format("HH:mm")} ` : ""}
+                  {item.title}
+                </Text>
+              }
+            />
+          </li>
+        ))}
+        {overflowCount > 0 && (
+          <li>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              +{overflowCount} more
+            </Text>
+          </li>
+        )}
+      </ul>
+    );
+  }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      {sorted.length === 0 ? (
-        <Empty description="No important dates yet" />
-      ) : (
-        <List
-          dataSource={sorted}
-          renderItem={(d) => {
-            const status = getStatus(d);
-            return (
-              <List.Item
-                actions={[
-                  <Button key="remove" size="small" danger onClick={() => onRemove(d.id)}>
-                    Remove
-                  </Button>,
-                ]}
+    <div>
+      <div>
+        <Text strong>Upcoming</Text>
+        <ul style={{ listStyle: "none", padding: 0, marginTop: 8 }}>
+          {dates
+            .slice()
+            .sort((a, b) => toLocalMoment(a).diff(toLocalMoment(b)))
+            .map((d) => (
+              <li
+                key={d.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "8px 0",
+                  borderBottom: "1px solid #f0f0f0",
+                }}
               >
-                <List.Item.Meta
-                  title={
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      {daysUntil(d.date) <= d.warningDays && daysUntil(d.date) >= 0 && (
-                        <span style={{ color: "red" }}>★</span>
-                      )}
-                      <Text strong>{d.title}</Text>
-                      <Tag color={status.color}>{status.label}</Tag>
-                    </div>
-                  }
-                  description={
-                    <div>
-                      <Text type="secondary" style={{ fontSize: "12px" }}>
-                        {formatDate(d.date)}
-                        {d.description && ` — ${d.description}`}
-                      </Text>
-                    </div>
-                  }
-                />
-              </List.Item>
-            );
-          }}
-        />
-      )}
-
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "8px",
-          padding: "16px",
-          border: "0.5px solid #f0f0f0",
-          borderRadius: "8px",
-        }}
-      >
-        <Text strong style={{ fontSize: "13px" }}>Add important date</Text>
-        <div style={{ display: "flex", gap: "8px" }}>
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Title (e.g. Final exam)"
-            style={{ flex: 2 }}
-          />
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            style={{
-              flex: 1,
-              padding: "4px 8px",
-              border: "1px solid #d9d9d9",
-              borderRadius: "6px",
-              fontSize: "13px",
-            }}
-          />
-        </div>
-        <div style={{ display: "flex", gap: "8px" }}>
-          <Input
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Description (optional)"
-            style={{ flex: 1 }}
-          />
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <Text style={{ fontSize: "12px", whiteSpace: "nowrap" }}>Warn</Text>
-            <InputNumber
-              value={warningDays}
-              onChange={(val) => setWarningDays(val ?? 7)}
-              min={1}
-              max={90}
-              style={{ width: "60px" }}
-            />
-            <Text style={{ fontSize: "12px" }}>days before</Text>
-          </div>
-          <Button type="primary" onClick={handleAdd}>Add</Button>
-        </div>
+                <div>
+                  <Text strong>{d.title}</Text>
+                  <Badge
+                    count={`${daysLeft(d)}d left`}
+                    style={{ backgroundColor: "#fff7e6", color: "#fa8c16", marginLeft: 8 }}
+                  />
+                  <div>
+                    <Text type="secondary">
+                      {toLocalMoment(d).format(d.time ? "MMM D, YYYY h:mm A" : "MMM D, YYYY")}
+                      {d.time && d.timezone ? ` (from ${d.time} ${d.timezone})` : ""}
+                      {d.description ? ` — ${d.description}` : ""}
+                    </Text>
+                  </div>
+                </div>
+                <Popconfirm title="Remove this date?" onConfirm={() => handleRemove(d.id)}>
+                  <Button danger size="small" icon={<DeleteOutlined />}>
+                    Remove
+                  </Button>
+                </Popconfirm>
+              </li>
+            ))}
+        </ul>
       </div>
+
+      <div style={{ marginTop: 24, height: 520, overflow: "hidden" }}>
+        <Calendar
+          fullscreen
+          cellRender={(value, info) => (info.type === "date" ? dateCellRender(value) : info.originNode)}
+          onSelect={handleSelect}
+        />
+      </div>
+
+      <Modal
+        title={`Add important date — ${selectedDate?.format("MMM D, YYYY") ?? ""}`}
+        open={modalOpen}
+        onCancel={() => setModalOpen(false)}
+        onOk={handleAdd}
+        okText="Add"
+      >
+        <Form form={form} layout="vertical">
+          <Form.Item name="title" label="Title" rules={[{ required: true, message: "Title is required" }]}>
+            <Input placeholder="e.g. Final exam" />
+          </Form.Item>
+          <Form.Item name="description" label="Description (optional)">
+            <Input placeholder="Description" />
+          </Form.Item>
+          <Form.Item name="time" label="Time (optional — leave blank for an all-day date)">
+            <TimePicker format="h:mm A" style={{ width: "100%" }} />
+          </Form.Item>
+          <Form.Item name="timezone" label="Time is in this timezone" initialValue="Asia/Seoul">
+            <Select options={TIMEZONE_OPTIONS} />
+          </Form.Item>
+          <Form.Item name="warningDays" label="Warn how many days before?" initialValue={7}>
+            <InputNumber min={0} max={90} style={{ width: "100%" }} />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 }

@@ -183,19 +183,88 @@ export default function Home() {
           )}
 
           {tab === "mandal" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px", height: "100%", minHeight: 0 }}>
-              <Text type="secondary" style={{ flexShrink: 0 }}>
-                Click a task cell to mark complete (+1 C$). Click again to undo.
-              </Text>
-              <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <div style={{ height: "100%", aspectRatio: "1/1", maxHeight: "100%", maxWidth: "100%" }}>
-                  <MandalGrid
-                    mandal={state.mandal}
-                    onMainGoalChange={setMainGoal}
-                    onSubGoalChange={setSubGoalTitle}
-                    onTaskTextChange={setTaskText}
-                    onTaskToggle={toggleTask}
-                  />
+            <div style={{ display: "flex", gap: "16px", height: "100%", minHeight: 0 }}>
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "8px", minHeight: 0 }}>
+                <Text type="secondary" style={{ flexShrink: 0 }}>
+                  Click a task cell to mark complete (+1 C$). Click again to undo.
+                </Text>
+                <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ height: "100%", aspectRatio: "1/1", maxHeight: "100%", maxWidth: "100%" }}>
+                    <MandalGrid
+                      mandal={state.mandal}
+                      onMainGoalChange={setMainGoal}
+                      onSubGoalChange={setSubGoalTitle}
+                      onTaskTextChange={setTaskText}
+                      onTaskToggle={toggleTask}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  width: "200px",
+                  flexShrink: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px",
+                  overflowY: "auto",
+                  paddingTop: "28px",
+                }}
+              >
+                {state.mandal.subGoals.map((sg) => {
+                  const done = sg.tasks.filter((t) => t.completed).length;
+                  const total = sg.tasks.length;
+                  const pct = Math.round((done / total) * 100);
+                  return (
+                    <div key={sg.id} style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <Text style={{ fontSize: "11px", color: "#555" }}>
+                          <span
+                            style={{
+                              display: "inline-block",
+                              width: "8px",
+                              height: "8px",
+                              borderRadius: "2px",
+                              background: sg.color,
+                              marginRight: "5px",
+                            }}
+                          />
+                          {sg.title || `Goal ${sg.id + 1}`}
+                        </Text>
+                        <Text style={{ fontSize: "11px", color: "#888" }}>{done}/{total}</Text>
+                      </div>
+                      <div style={{ height: "4px", background: "#f0f0f0", borderRadius: "2px" }}>
+                        <div
+                          style={{
+                            height: "100%",
+                            width: `${pct}%`,
+                            background: sg.color,
+                            borderRadius: "2px",
+                            transition: "width 0.3s ease",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <div
+                  style={{
+                    marginTop: "8px",
+                    paddingTop: "8px",
+                    borderTop: "0.5px solid #f0f0f0",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <Text style={{ fontSize: "12px", fontWeight: 500 }}>Total</Text>
+                  <Text style={{ fontSize: "12px", fontWeight: 500, color: "#7F77DD" }}>
+                    {state.mandal.subGoals.reduce((s, sg) => s + sg.tasks.filter((t) => t.completed).length, 0)}
+                    /
+                    {state.mandal.subGoals.reduce((s, sg) => s + sg.tasks.length, 0)}
+                  </Text>
                 </div>
               </div>
             </div>

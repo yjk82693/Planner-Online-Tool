@@ -53,7 +53,18 @@ export default function TodoList({ todos, importantDates, onAdd, onToggle, onRem
 
   const handleCarryOver = () => {
     Object.entries(carryOverSelections).forEach(([id, { selected, priority }]) => {
-      if (selected) onSetPriority(id, priority);
+      if (selected) {
+        onSetPriority(id, priority);
+      } else {
+        // not selected = user doesn't want it → remove
+        onRemove(id);
+      }
+    });
+    // remove any incomplete old todos not in selections at all
+    incompleteTodos.forEach((todo) => {
+      if (!carryOverSelections[todo.id]?.selected) {
+        onRemove(todo.id);
+      }
     });
     setCarryOverDone(true);
   };
@@ -154,9 +165,13 @@ export default function TodoList({ todos, importantDates, onAdd, onToggle, onRem
                 >
                   Carry over selected
                 </Button>
-                <Button size="small" onClick={() => setCarryOverDone(true)}>
-                  Dismiss
-                </Button>
+                <Button size="small" onClick={() => {
+                // dismiss = remove all incomplete old todos
+                incompleteTodos.forEach((todo) => onRemove(todo.id));
+                setCarryOverDone(true);
+              }}>
+                Dismiss
+              </Button>
               </div>
             }
           >

@@ -95,6 +95,8 @@ model ImportantDate {
   userId      String
   title       String
   date        String
+  time        String? // "HH:mm", optional — date-only events have no time
+  timezone    String? // IANA name, e.g. "America/New_York"
   description String @default("")
   warningDays Int    @default(7)
 

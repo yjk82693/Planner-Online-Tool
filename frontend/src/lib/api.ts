@@ -1,6 +1,6 @@
 import { getToken } from "./auth";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+export const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 async function req(path: string, options?: RequestInit) {
   const token = getToken();

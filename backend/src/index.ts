@@ -12,7 +12,10 @@ import authRouter from "./routes/auth";
 dotenv.config();
 
 const app = express();
-app.use(cors({ origin: ["http://localhost:3000", "http://localhost:3002"] }));
+app.use(cors({
+  origin: ["http://localhost:3000", "http://localhost:3002"],
+  credentials: true,
+}));
 app.use(express.json());
 
 app.use("/api/auth", authRouter);

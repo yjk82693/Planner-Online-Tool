@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@ant-design/icons": "^6.3.2",
+    "dayjs": "^1.11.21"
+  }
+}
