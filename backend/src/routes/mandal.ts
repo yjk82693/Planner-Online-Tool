@@ -7,8 +7,12 @@ router.use(authMiddleware);
 
 router.get("/", async (req: AuthRequest, res) => {
   const goal = await prisma.mandalGoal.findUnique({ where: { userId: req.userId! } });
-  if (!goal) return res.json({ mainGoal: "", subGoals: [] });
-  return res.json({ mainGoal: goal.mainGoal, subGoals: JSON.parse(goal.subGoals) });
+  if (!goal) return res.json({ mainGoal: "", subGoals: [], updatedAt: null });
+  return res.json({
+    mainGoal: goal.mainGoal,
+    subGoals: JSON.parse(goal.subGoals),
+    updatedAt: goal.updatedAt,
+  });
 });
 
 router.put("/", async (req: AuthRequest, res) => {
@@ -18,7 +22,11 @@ router.put("/", async (req: AuthRequest, res) => {
     update: { mainGoal, subGoals: JSON.stringify(subGoals) },
     create: { userId: req.userId!, mainGoal, subGoals: JSON.stringify(subGoals) },
   });
-  return res.json({ mainGoal: goal.mainGoal, subGoals: JSON.parse(goal.subGoals) });
+  return res.json({
+    mainGoal: goal.mainGoal,
+    subGoals: JSON.parse(goal.subGoals),
+    updatedAt: goal.updatedAt,
+  });
 });
 
 export default router;

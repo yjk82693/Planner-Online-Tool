@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { PlannerState, CourseCategory } from "@/types/mandal";
+import { PlannerState, CourseCategory, SubGoal } from "@/types/mandal";
 import { DailyLog } from "@/types/dailyLog";
 import { DEFAULT_STATE } from "@/lib/storage";
 import { api } from "@/lib/api";
@@ -47,8 +47,24 @@ export function usePlanner() {
           (t: { id: string }) => !staleDone.find((s: { id: string }) => s.id === t.id)
         );
 
+        // auto-reset mandal task completion if the last save was on a previous day
+        let mandalData = mandal.mainGoal ? mandal : DEFAULT_STATE.mandal;
+        if (mandal.updatedAt) {
+          const mandalDayKey = new Date(mandal.updatedAt).toISOString().slice(0, 10);
+          const hasCompletedTasks = mandalData.subGoals.some((sg: { tasks: { completed: boolean }[] }) =>
+            sg.tasks.some((t) => t.completed)
+          );
+          if (mandalDayKey < todayKey && hasCompletedTasks) {
+            const resetSubGoals = mandalData.subGoals.map((sg: SubGoal) => ({
+              ...sg,
+              tasks: sg.tasks.map((t) => ({ ...t, completed: false })),
+            }));
+            mandalData = { ...mandalData, subGoals: resetSubGoals };
+            await api.saveMandal({ mainGoal: mandalData.mainGoal, subGoals: resetSubGoals });
+          }
+        }
         setState({
-          mandal: mandal.mainGoal ? mandal : DEFAULT_STATE.mandal,
+          mandal: mandalData,
           totalPoints:
             logs.pointLogs
               .filter((l: { type: string; points: number }) => l.type === "earned")

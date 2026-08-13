@@ -11,9 +11,9 @@ router.get("/", async (req: AuthRequest, res) => {
 });
 
 router.post("/", async (req: AuthRequest, res) => {
-  const { title, date, description, warningDays } = req.body;
+  const { title, date, description, warningDays, time, timezone } = req.body;
   const d = await prisma.importantDate.create({
-    data: { userId: req.userId!, title, date, description, warningDays },
+    data: { userId: req.userId!, title, date, description, warningDays, time, timezone },
   });
   return res.json(d);
 });
