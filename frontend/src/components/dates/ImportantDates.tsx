@@ -13,7 +13,6 @@ dayjs.extend(timezone);
 const { Text } = Typography;
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
-// Add/remove zones here as needed
 const TIMEZONE_OPTIONS = [
   { value: "Asia/Seoul", label: "Seoul (KST)" },
   { value: "America/New_York", label: "New York / State College (ET)" },
@@ -87,8 +86,8 @@ export default function ImportantDatesCalendar({
     fetchImportantDates().then(setDates);
   }, []);
 
-  // Group by the LOCAL (converted) day, so a 11pm ET entry that's already
-  // tomorrow morning in Seoul shows up on the correct calendar cell.
+  // Group by the LOCAL (converted) day, so a late-night entry that's
+  // already tomorrow morning in your local timezone shows on the right cell.
   const byDay = useMemo(() => {
     const map = new Map<string, ImportantDate[]>();
     for (const d of dates) {
@@ -107,7 +106,6 @@ export default function ImportantDatesCalendar({
 
   async function handleAdd() {
     const values = await form.validateFields();
-    console.log("form values:", values);
     const payload: Omit<ImportantDate, "id"> = {
       title: values.title,
       description: values.description,
@@ -164,7 +162,7 @@ export default function ImportantDatesCalendar({
         <Text strong>Upcoming</Text>
         <ul style={{ listStyle: "none", padding: 0, marginTop: 8 }}>
           {dates
-            .slice()
+            .filter((d) => daysLeft(d) >= 0)
             .sort((a, b) => toLocalMoment(a).diff(toLocalMoment(b)))
             .map((d) => (
               <li
