@@ -5,6 +5,8 @@ import mandalRouter from "./routes/mandal";
 import todosRouter from "./routes/todos";
 import coursesRouter from "./routes/courses";
 import datesRouter from "./routes/dates";
+import syllabusRouter from "./routes/syllabus";
+import canvasRouter from "./routes/canvas";
 import shopRouter from "./routes/shop";
 import logsRouter from "./routes/logs";
 import authRouter from "./routes/auth";
@@ -23,6 +25,8 @@ app.use("/api/mandal", mandalRouter);
 app.use("/api/todos", todosRouter);
 app.use("/api/courses", coursesRouter);
 app.use("/api/dates", datesRouter);
+app.use("/api/syllabus", syllabusRouter);
+app.use("/api/canvas", canvasRouter);
 app.use("/api/shop", shopRouter);
 app.use("/api/logs", logsRouter);
 

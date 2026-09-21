@@ -13,6 +13,7 @@ model User {
   password  String
   firstName String   @default("")
   lastName  String   @default("")
+  canvasFeedUrl String?
   createdAt DateTime @default(now())
 
   mandalGoal     MandalGoal?
