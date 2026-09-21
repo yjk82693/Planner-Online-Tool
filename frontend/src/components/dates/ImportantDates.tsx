@@ -1,320 +1,233 @@
-"use client";
-
 import { useState, useMemo, useEffect } from "react";
-import { Button, Input, Checkbox, Tag, Typography, Empty, Select, Card } from "antd";
-import { TodoItem, ImportantDate } from "@/types/mandal";
+import { Calendar, Modal, Form, Input, InputNumber, TimePicker, Select, Badge, Button, Popconfirm, Typography } from "antd";
+import { DeleteOutlined } from "@ant-design/icons";
+import type { Dayjs } from "dayjs";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+import { getToken } from "@/lib/auth";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const { Text } = Typography;
+const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
-interface Props {
-  todos: TodoItem[];
-  importantDates: ImportantDate[];
-  onAdd: (text: string, priority: number) => void;
-  onToggle: (id: string) => void;
-  onRemove: (id: string) => void;
-  onSetPriority: (id: string, priority: number) => void;
+const TIMEZONE_OPTIONS = [
+  { value: "Asia/Seoul", label: "Seoul (KST)" },
+  { value: "America/New_York", label: "New York / State College (ET)" },
+  { value: "America/Los_Angeles", label: "Los Angeles (PT)" },
+  { value: "America/Chicago", label: "Chicago (CT)" },
+  { value: "UTC", label: "UTC" },
+];
+
+interface ImportantDate {
+  id: string;
+  title: string;
+  description?: string;
+  date: string;
+  time?: string;
+  timezone?: string;
+  warningDays: number;
 }
 
-const CARRY_OVER_SHOWN_KEY = "carryOverBannerShownDate";
+function authHeaders(): HeadersInit {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
-export default function TodoList({ todos, importantDates, onAdd, onToggle, onRemove, onSetPriority }: Props) {
-  const [newText, setNewText] = useState("");
-  const [newPriority, setNewPriority] = useState<number>(0);
-  const [carryOverSelections, setCarryOverSelections] = useState<Record<string, { selected: boolean; priority: number }>>({});
+async function fetchImportantDates(): Promise<ImportantDate[]> {
+  const res = await fetch(`${BASE}/api/dates`, { headers: authHeaders() });
+  if (!res.ok) {
+    console.error("Failed to fetch important dates:", res.status, await res.text());
+    return [];
+  }
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
 
-  const todayKey = new Date().toISOString().slice(0, 10);
-
-  // "already shown today" persists across reloads/logins via localStorage,
-  // so the banner only appears once per day instead of on every visit.
-  const [carryOverDone, setCarryOverDone] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem(CARRY_OVER_SHOWN_KEY) === todayKey;
+async function createImportantDate(payload: Omit<ImportantDate, "id">): Promise<ImportantDate> {
+  const res = await fetch(`${BASE}/api/dates`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(payload),
   });
+  return res.json();
+}
 
-  const incompleteTodos = useMemo(() => {
-    return todos.filter(
-      (t) => !t.completed && t.createdAt?.slice(0, 10) < todayKey
-    );
-  }, [todos, todayKey]);
+async function deleteImportantDate(id: string): Promise<void> {
+  await fetch(`${BASE}/api/dates/${id}`, { method: "DELETE", headers: authHeaders() });
+}
 
-  const showCarryOver = incompleteTodos.length > 0 && !carryOverDone;
+function toLocalMoment(d: ImportantDate) {
+  if (!d.time || !d.timezone) return dayjs(d.date);
+  return dayjs.tz(`${d.date} ${d.time}`, "YYYY-MM-DD HH:mm", d.timezone).tz(dayjs.tz.guess());
+}
 
-  // Mark today as "shown" the moment the banner actually renders,
-  // so navigating away and back doesn't bring it up again the same day.
+function daysLeft(d: ImportantDate) {
+  return toLocalMoment(d).startOf("day").diff(dayjs().startOf("day"), "day");
+}
+
+const MAX_BADGES_PER_CELL = 2;
+
+export default function ImportantDatesCalendar({
+  initialDates = [],
+}: {
+  initialDates?: ImportantDate[];
+}) {
+  const [dates, setDates] = useState<ImportantDate[]>(initialDates);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Dayjs | null>(null);
+  const [form] = Form.useForm();
+
   useEffect(() => {
-    if (showCarryOver) {
-      localStorage.setItem(CARRY_OVER_SHOWN_KEY, todayKey);
+    fetchImportantDates().then(setDates);
+  }, []);
+
+  const byDay = useMemo(() => {
+    const map = new Map<string, ImportantDate[]>();
+    for (const d of dates) {
+      const key = toLocalMoment(d).format("YYYY-MM-DD");
+      map.set(key, [...(map.get(key) ?? []), d]);
     }
-  }, [showCarryOver, todayKey]);
+    return map;
+  }, [dates]);
 
-  const handleCarryOverToggle = (id: string) => {
-    setCarryOverSelections((prev) => ({
-      ...prev,
-      [id]: {
-        selected: !prev[id]?.selected,
-        priority: prev[id]?.priority ?? 0,
-      },
-    }));
-  };
+  function handleSelect(value: Dayjs) {
+    setSelectedDate(value);
+    form.resetFields();
+    form.setFieldsValue({ warningDays: 7, timezone: "Asia/Seoul" });
+    setModalOpen(true);
+  }
 
-  const handleCarryOverPriority = (id: string, priority: number) => {
-    setCarryOverSelections((prev) => ({
-      ...prev,
-      [id]: {
-        selected: prev[id]?.selected ?? false,
-        priority,
-      },
-    }));
-  };
+  async function handleAdd() {
+    const values = await form.validateFields();
+    const payload: Omit<ImportantDate, "id"> = {
+      title: values.title,
+      description: values.description,
+      date: selectedDate!.format("YYYY-MM-DD"),
+      time: values.time ? (values.time as Dayjs).format("HH:mm") : undefined,
+      timezone: values.time ? values.timezone : undefined,
+      warningDays: values.warningDays ?? 7,
+    };
+    const created = await createImportantDate(payload);
+    setDates((prev) => [...prev, created]);
+    setModalOpen(false);
+  }
 
-  const handleCarryOver = () => {
-    Object.entries(carryOverSelections).forEach(([id, { selected, priority }]) => {
-      if (selected) {
-        onSetPriority(id, priority);
-      } else {
-        onRemove(id);
-      }
-    });
-    incompleteTodos.forEach((todo) => {
-      if (!carryOverSelections[todo.id]?.selected) {
-        onRemove(todo.id);
-      }
-    });
-    setCarryOverDone(true);
-  };
+  async function handleRemove(id: string) {
+    await deleteImportantDate(id);
+    setDates((prev) => prev.filter((d) => d.id !== id));
+  }
 
-  const handleAdd = () => {
-    if (!newText.trim()) return;
-    onAdd(newText.trim(), newPriority);
-    setNewText("");
-    setNewPriority(0);
-  };
-
-  const top3 = todos
-    .filter((t) => t.priority > 0 && !t.completed)
-    .sort((a, b) => a.priority - b.priority)
-    .slice(0, 3);
-
-  const rest = todos.filter((t) => t.priority === 0 && !t.completed);
-  const completed = todos.filter((t) => t.completed);
-
-  const urgentDateIds = new Set(
-    importantDates
-      .filter((d) => {
-        const daysAway = Math.ceil(
-          (new Date(d.date).getTime() - new Date(todayKey).getTime()) / (1000 * 60 * 60 * 24)
-        );
-        return daysAway >= 0 && daysAway <= d.warningDays;
-      })
-      .map((d) => d.id)
-  );
-
-  const renderTodo = (todo: TodoItem) => {
-    const isUrgent = todo.importantDateId && urgentDateIds.has(todo.importantDateId);
+  function dateCellRender(value: Dayjs) {
+    const key = value.format("YYYY-MM-DD");
+    const items = byDay.get(key);
+    if (!items?.length) return null;
+    const visible = items.slice(0, MAX_BADGES_PER_CELL);
+    const overflowCount = items.length - visible.length;
     return (
-      <div
-        key={todo.id}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "10px",
-          padding: "8px 12px",
-          border: "0.5px solid #f0f0f0",
-          borderRadius: "8px",
-          background: todo.completed ? "#fafafa" : "#fff",
-        }}
-      >
-        <Checkbox checked={todo.completed} onChange={() => onToggle(todo.id)} />
-        <Text
-          style={{
-            flex: 1,
-            textDecoration: todo.completed ? "line-through" : "none",
-            color: todo.completed ? "#aaa" : "#333",
-            fontSize: "13px",
-          }}
-        >
-          {isUrgent && <span style={{ color: "red", marginRight: "6px" }}>★</span>}
-          {todo.text}
-        </Text>
-        <Select
-          size="small"
-          value={todo.priority}
-          onChange={(val) => onSetPriority(todo.id, val)}
-          style={{ width: "110px", fontSize: "12px" }}
-          options={[
-            { value: 0, label: "Normal" },
-            { value: 1, label: "Priority 1" },
-            { value: 2, label: "Priority 2" },
-            { value: 3, label: "Priority 3" },
-          ]}
-        />
-        <Button size="small" danger onClick={() => onRemove(todo.id)}>✕</Button>
-      </div>
+      <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
+        {visible.map((item) => (
+          <li key={item.id} style={{ overflow: "hidden" }}>
+            <Badge
+              status="processing"
+              text={
+                <Text ellipsis style={{ maxWidth: 80, fontSize: 12 }}>
+                  {item.time ? `${toLocalMoment(item).format("HH:mm")} ` : ""}
+                  {item.title}
+                </Text>
+              }
+            />
+          </li>
+        ))}
+        {overflowCount > 0 && (
+          <li>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              +{overflowCount} more
+            </Text>
+          </li>
+        )}
+      </ul>
     );
-  };
+  }
 
   return (
-    <div style={{ display: "flex", gap: "24px", height: "100%" }}>
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "16px" }}>
-
-        {showCarryOver && (
-          <Card
-            size="small"
-            style={{ border: "1px dashed #7F77DD", borderRadius: "8px", background: "#faf9ff" }}
-            title={
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span style={{ color: "#7F77DD" }}>↩</span>
-                <Text strong style={{ color: "#7F77DD", fontSize: "13px" }}>
-                  {incompleteTodos.length} incomplete task{incompleteTodos.length > 1 ? "s" : ""} from previous days — carry over?
-                </Text>
-              </div>
-            }
-            extra={
-              <div style={{ display: "flex", gap: "8px" }}>
-                <Button
-                  size="small"
-                  type="primary"
-                  style={{ background: "#7F77DD", borderColor: "#7F77DD" }}
-                  onClick={handleCarryOver}
-                >
-                  Carry over selected
-                </Button>
-                <Button size="small" onClick={() => {
-                  incompleteTodos.forEach((todo) => onRemove(todo.id));
-                  setCarryOverDone(true);
-                }}>
-                  Dismiss
-                </Button>
-              </div>
-            }
-          >
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              {incompleteTodos.map((todo) => {
-                const sel = carryOverSelections[todo.id];
-                return (
-                  <div
-                    key={todo.id}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "10px",
-                      padding: "6px 8px",
-                      borderRadius: "6px",
-                      background: sel?.selected ? "#ede9ff" : "transparent",
-                    }}
-                  >
-                    <Checkbox
-                      checked={sel?.selected ?? false}
-                      onChange={() => handleCarryOverToggle(todo.id)}
-                    />
-                    <Text style={{ flex: 1, fontSize: "12px" }}>{todo.text}</Text>
-                    <Select
-                      size="small"
-                      value={sel?.priority ?? todo.priority}
-                      onChange={(val) => handleCarryOverPriority(todo.id, val)}
-                      style={{ width: "110px" }}
-                      options={[
-                        { value: 0, label: "Normal" },
-                        { value: 1, label: "Priority 1" },
-                        { value: 2, label: "Priority 2" },
-                        { value: 3, label: "Priority 3" },
-                      ]}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-        )}
-
-        {top3.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-            <Text strong style={{ fontSize: "13px", color: "#888" }}>Top priorities</Text>
-            {top3.map(renderTodo)}
-          </div>
-        )}
-
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          <Text strong style={{ fontSize: "13px", color: "#888" }}>All tasks</Text>
-          {todos.length === 0 ? (
-            <Empty description="No tasks yet" />
-          ) : (
-            rest.map(renderTodo)
-          )}
-        </div>
-
-        {completed.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-            <Text strong style={{ fontSize: "13px", color: "#aaa" }}>Completed</Text>
-            {completed.map(renderTodo)}
-          </div>
-        )}
-
-        <div
-          style={{
-            display: "flex",
-            gap: "8px",
-            paddingTop: "12px",
-            borderTop: "0.5px solid #f0f0f0",
-            marginTop: "auto",
-          }}
-        >
-          <Input
-            value={newText}
-            onChange={(e) => setNewText(e.target.value)}
-            placeholder="Add a task..."
-            onPressEnter={handleAdd}
-            style={{ flex: 1 }}
-          />
-          <Select
-            value={newPriority}
-            onChange={(val) => setNewPriority(val)}
-            style={{ width: "110px" }}
-            options={[
-              { value: 0, label: "Normal" },
-              { value: 1, label: "Priority 1" },
-              { value: 2, label: "Priority 2" },
-              { value: 3, label: "Priority 3" },
-            ]}
-          />
-          <Button type="primary" onClick={handleAdd}>Add</Button>
-        </div>
-      </div>
-
-      <div
-        style={{
-          width: "240px",
-          border: "0.5px solid #f0f0f0",
-          borderRadius: "8px",
-          padding: "16px",
-          display: "flex",
-          flexDirection: "column",
-          gap: "8px",
-        }}
-      >
-        <Text strong style={{ fontSize: "13px", color: "#888" }}>On-progress projects</Text>
-        {todos.filter((t) => !t.completed && t.priority > 0).length === 0 ? (
-          <Empty description="No active priorities" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-        ) : (
-          todos
-            .filter((t) => !t.completed && t.priority > 0)
-            .sort((a, b) => a.priority - b.priority)
-            .map((t) => (
-              <div
-                key={t.id}
+    <div>
+      <div>
+        <Text strong>Upcoming</Text>
+        <ul style={{ listStyle: "none", padding: 0, marginTop: 8 }}>
+          {dates
+            .filter((d) => daysLeft(d) >= 0)
+            .sort((a, b) => toLocalMoment(a).diff(toLocalMoment(b)))
+            .map((d) => (
+              <li
+                key={d.id}
                 style={{
-                  padding: "8px",
-                  background: "#f9f9f9",
-                  borderRadius: "6px",
-                  fontSize: "12px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "8px 0",
+                  borderBottom: "1px solid #f0f0f0",
                 }}
               >
-                <Tag color="blue" style={{ margin: "0 0 4px" }}>P{t.priority}</Tag>
-                <div>{t.text}</div>
-              </div>
-            ))
-        )}
+                <div>
+                  <Text strong>{d.title}</Text>
+                  <Badge
+                    count={`${daysLeft(d)}d left`}
+                    style={{ backgroundColor: "#fff7e6", color: "#fa8c16", marginLeft: 8 }}
+                  />
+                  <div>
+                    <Text type="secondary">
+                      {toLocalMoment(d).format(d.time ? "MMM D, YYYY h:mm A" : "MMM D, YYYY")}
+                      {d.time && d.timezone ? ` (from ${d.time} ${d.timezone})` : ""}
+                      {d.description ? ` — ${d.description}` : ""}
+                    </Text>
+                  </div>
+                </div>
+                <Popconfirm title="Remove this date?" onConfirm={() => handleRemove(d.id)}>
+                  <Button danger size="small" icon={<DeleteOutlined />}>
+                    Remove
+                  </Button>
+                </Popconfirm>
+              </li>
+            ))}
+        </ul>
       </div>
+
+      <div style={{ marginTop: 24, height: 520, overflow: "hidden" }}>
+        <Calendar
+          fullscreen
+          cellRender={(value, info) => (info.type === "date" ? dateCellRender(value) : info.originNode)}
+          onSelect={handleSelect}
+        />
+      </div>
+
+      <Modal
+        title={`Add important date — ${selectedDate?.format("MMM D, YYYY") ?? ""}`}
+        open={modalOpen}
+        onCancel={() => setModalOpen(false)}
+        onOk={handleAdd}
+        okText="Add"
+      >
+        <Form form={form} layout="vertical">
+          <Form.Item name="title" label="Title" rules={[{ required: true, message: "Title is required" }]}>
+            <Input placeholder="e.g. Final exam" />
+          </Form.Item>
+          <Form.Item name="description" label="Description (optional)">
+            <Input placeholder="Description" />
+          </Form.Item>
+          <Form.Item name="time" label="Time (optional — leave blank for an all-day date)">
+            <TimePicker format="h:mm A" style={{ width: "100%" }} />
+          </Form.Item>
+          <Form.Item name="timezone" label="Time is in this timezone" initialValue="Asia/Seoul">
+            <Select options={TIMEZONE_OPTIONS} />
+          </Form.Item>
+          <Form.Item name="warningDays" label="Warn how many days before?" initialValue={7}>
+            <InputNumber min={0} max={90} style={{ width: "100%" }} />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Button, Input, Checkbox, Tag, Typography, Empty, Select, Card } from "antd";
 import { TodoItem, ImportantDate } from "@/types/mandal";
 
@@ -15,13 +15,26 @@ interface Props {
   onSetPriority: (id: string, priority: number) => void;
 }
 
+const CARRY_OVER_SHOWN_KEY = "carryOverBannerShownDate";
+
 export default function TodoList({ todos, importantDates, onAdd, onToggle, onRemove, onSetPriority }: Props) {
   const [newText, setNewText] = useState("");
   const [newPriority, setNewPriority] = useState<number>(0);
   const [carryOverSelections, setCarryOverSelections] = useState<Record<string, { selected: boolean; priority: number }>>({});
-  const [carryOverDone, setCarryOverDone] = useState(false);
 
-  const todayKey = new Date().toISOString().slice(0, 10);
+  function getLocalDateKey(d: Date = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+const todayKey = getLocalDateKey();
+
+  const [carryOverDone, setCarryOverDone] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem(CARRY_OVER_SHOWN_KEY) === todayKey;
+  });
 
   const incompleteTodos = useMemo(() => {
     return todos.filter(
@@ -30,6 +43,12 @@ export default function TodoList({ todos, importantDates, onAdd, onToggle, onRem
   }, [todos, todayKey]);
 
   const showCarryOver = incompleteTodos.length > 0 && !carryOverDone;
+
+  useEffect(() => {
+    if (showCarryOver) {
+      localStorage.setItem(CARRY_OVER_SHOWN_KEY, todayKey);
+    }
+  }, [showCarryOver, todayKey]);
 
   const handleCarryOverToggle = (id: string) => {
     setCarryOverSelections((prev) => ({
@@ -56,11 +75,9 @@ export default function TodoList({ todos, importantDates, onAdd, onToggle, onRem
       if (selected) {
         onSetPriority(id, priority);
       } else {
-        // not selected = user doesn't want it → remove
         onRemove(id);
       }
     });
-    // remove any incomplete old todos not in selections at all
     incompleteTodos.forEach((todo) => {
       if (!carryOverSelections[todo.id]?.selected) {
         onRemove(todo.id);
@@ -166,12 +183,11 @@ export default function TodoList({ todos, importantDates, onAdd, onToggle, onRem
                   Carry over selected
                 </Button>
                 <Button size="small" onClick={() => {
-                // dismiss = remove all incomplete old todos
-                incompleteTodos.forEach((todo) => onRemove(todo.id));
-                setCarryOverDone(true);
-              }}>
-                Dismiss
-              </Button>
+                  incompleteTodos.forEach((todo) => onRemove(todo.id));
+                  setCarryOverDone(true);
+                }}>
+                  Dismiss
+                </Button>
               </div>
             }
           >
