@@ -1,10 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { Button, Input, Collapse, Checkbox, Tag, Typography, Empty, Tabs, Badge } from "antd";
+import { useState, useEffect } from "react";
+import { Button, Input, Collapse, Checkbox, Tag, Typography, Empty, Tabs, Badge, Modal, Card, Alert, Spin } from "antd";
 import { Course, CourseCategory, CourseAssignment } from "@/types/mandal";
+import { api } from "@/lib/api";
 
 const { Text } = Typography;
+
+interface CanvasPreviewItem {
+  courseCode: string;
+  count: number;
+  items: { title: string; date: string; uid: string }[];
+}
 
 interface Props {
   courses: Course[];
@@ -15,6 +22,11 @@ interface Props {
   onToggleAssignment: (courseId: string, assignmentId: string) => void;
   onAddContent: (courseId: string, text: string) => void;
   onAddReview: (courseId: string, text: string) => void;
+  onImportCanvasCourse: (payload: {
+    courseName: string;
+    category: CourseCategory;
+    items: { title: string; date: string; uid: string }[];
+  }) => Promise<unknown>;
 }
 
 function CourseCard({
@@ -168,6 +180,189 @@ function CourseCard({
   );
 }
 
+function CanvasImportSection({
+  onImportCanvasCourse,
+}: {
+  onImportCanvasCourse: Props["onImportCanvasCourse"];
+}) {
+  const [feedUrl, setFeedUrl] = useState("");
+  const [feedUrlInput, setFeedUrlInput] = useState("");
+  const [loadingFeedUrl, setLoadingFeedUrl] = useState(true);
+  const [savingFeedUrl, setSavingFeedUrl] = useState(false);
+
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<CanvasPreviewItem[] | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedCourses, setSelectedCourses] = useState<Set<string>>(new Set());
+  const [importing, setImporting] = useState(false);
+
+  useEffect(() => {
+    api
+      .getCanvasFeedUrl()
+      .then((res: { canvasFeedUrl: string | null }) => {
+        setFeedUrl(res.canvasFeedUrl ?? "");
+        setFeedUrlInput(res.canvasFeedUrl ?? "");
+      })
+      .catch(() => {})
+      .finally(() => setLoadingFeedUrl(false));
+  }, []);
+
+  async function handleSaveFeedUrl() {
+    setSavingFeedUrl(true);
+    try {
+      await api.setCanvasFeedUrl(feedUrlInput.trim());
+      setFeedUrl(feedUrlInput.trim());
+    } finally {
+      setSavingFeedUrl(false);
+    }
+  }
+
+  async function handleSync() {
+    setSyncing(true);
+    setSyncError(null);
+    try {
+      const res = await api.syncCanvas();
+      setPreview(res.preview);
+      setSelectedCourses(new Set());
+      setModalOpen(true);
+    } catch (err) {
+      setSyncError(
+        err instanceof Error ? err.message : "Could not sync with Canvas"
+      );
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  function toggleCourseSelection(courseCode: string) {
+    setSelectedCourses((prev) => {
+      const next = new Set(prev);
+      if (next.has(courseCode)) next.delete(courseCode);
+      else next.add(courseCode);
+      return next;
+    });
+  }
+
+  async function handleImportSelected() {
+    if (!preview) return;
+    setImporting(true);
+    try {
+      const toImport = preview.filter((c) => selectedCourses.has(c.courseCode));
+      for (const course of toImport) {
+        await onImportCanvasCourse({
+          courseName: course.courseCode,
+          category: "academic",
+          items: course.items,
+        });
+      }
+      setModalOpen(false);
+      setPreview(null);
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  if (loadingFeedUrl) return null;
+
+  return (
+    <Card size="small" style={{ background: "#fafafa" }}>
+      {!feedUrl ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          <Text strong style={{ fontSize: "13px" }}>Connect Canvas</Text>
+          <Text type="secondary" style={{ fontSize: "12px" }}>
+            Paste your Canvas calendar feed URL to import courses and assignment due dates.
+            Find it in Canvas under Calendar → "Calendar Feed" (bottom-right sidebar).
+            It's a private link — keep it out of anything public.
+          </Text>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <Input
+              size="small"
+              value={feedUrlInput}
+              onChange={(e) => setFeedUrlInput(e.target.value)}
+              placeholder="https://your-school.instructure.com/feeds/calendars/..."
+              style={{ flex: 1 }}
+            />
+            <Button
+              size="small"
+              type="primary"
+              loading={savingFeedUrl}
+              disabled={!feedUrlInput.trim()}
+              onClick={handleSaveFeedUrl}
+            >
+              Save
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <Text type="secondary" style={{ fontSize: "12px" }}>Canvas feed connected</Text>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <Button size="small" loading={syncing} onClick={handleSync}>
+              Sync from Canvas
+            </Button>
+            <Button
+              size="small"
+              type="link"
+              onClick={() => {
+                setFeedUrl("");
+                setFeedUrlInput("");
+              }}
+            >
+              Change link
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {syncError && (
+        <Alert type="error" message={syncError} showIcon style={{ marginTop: "8px" }} />
+      )}
+
+      <Modal
+        title="Import from Canvas"
+        open={modalOpen}
+        onCancel={() => setModalOpen(false)}
+        onOk={handleImportSelected}
+        okText={`Import ${selectedCourses.size || ""} course${selectedCourses.size === 1 ? "" : "s"}`}
+        okButtonProps={{ disabled: selectedCourses.size === 0, loading: importing }}
+      >
+        {!preview || preview.length === 0 ? (
+          <Empty description="No courses found in your Canvas feed" />
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            {preview.map((course) => (
+              <div
+                key={course.courseCode}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  padding: "6px 8px",
+                  borderRadius: "6px",
+                  background: selectedCourses.has(course.courseCode) ? "#e6f4ff" : "transparent",
+                }}
+              >
+                <Checkbox
+                  checked={selectedCourses.has(course.courseCode)}
+                  onChange={() => toggleCourseSelection(course.courseCode)}
+                />
+                <Text style={{ flex: 1, fontSize: "13px" }}>{course.courseCode}</Text>
+                <Tag>{course.count} item{course.count === 1 ? "" : "s"}</Tag>
+              </div>
+            ))}
+          </div>
+        )}
+        {importing && (
+          <div style={{ textAlign: "center", marginTop: "12px" }}>
+            <Spin size="small" /> <Text type="secondary" style={{ fontSize: "12px" }}>Importing...</Text>
+          </div>
+        )}
+      </Modal>
+    </Card>
+  );
+}
+
 export default function CourseTracker({
   courses,
   onAdd,
@@ -177,6 +372,7 @@ export default function CourseTracker({
   onToggleAssignment,
   onAddContent,
   onAddReview,
+  onImportCanvasCourse,
 }: Props) {
   const [newName, setNewName] = useState("");
   const [newCategory, setNewCategory] = useState<CourseCategory>("academic");
@@ -245,6 +441,8 @@ export default function CourseTracker({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px", height: "100%" }}>
+      <CanvasImportSection onImportCanvasCourse={onImportCanvasCourse} />
+
       <div style={{ display: "flex", gap: "8px" }}>
         <Input
           value={newName}

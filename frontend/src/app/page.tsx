@@ -49,6 +49,7 @@ export default function Home() {
     addReview,
     addImportantDate,
     removeImportantDate,
+    importCanvasCourse,
   } = usePlanner();
 
   useEffect(() => {
@@ -294,6 +295,7 @@ export default function Home() {
                 onToggleAssignment={toggleAssignment}
                 onAddContent={addContent}
                 onAddReview={addReview}
+                onImportCanvasCourse={importCanvasCourse}
               />
             </div>
           )}

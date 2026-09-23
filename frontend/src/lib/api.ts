@@ -51,6 +51,13 @@ export const api = {
     req(`/dates/${id}`, { method: "DELETE" }),
 
   getLogs: () => req("/logs"),
+
+  getCanvasFeedUrl: () => req("/canvas/feed-url"),
+  setCanvasFeedUrl: (canvasFeedUrl: string) =>
+    req("/canvas/feed-url", { method: "PUT", body: JSON.stringify({ canvasFeedUrl }) }),
+  syncCanvas: () => req("/canvas/sync", { method: "POST" }),
+  importCanvasCourse: (payload: { courseName: string; category: string; items: { title: string; date: string; uid: string }[] }) =>
+    req("/canvas/import", { method: "POST", body: JSON.stringify(payload) }),
   addPointLog: (date: string, points: number, type: string, reason: string) =>
     req("/logs", { method: "POST", body: JSON.stringify({ date, points, type, reason }) }),
   saveDailyLog: (date: string, tasks: unknown[], pointsEarned: number) =>

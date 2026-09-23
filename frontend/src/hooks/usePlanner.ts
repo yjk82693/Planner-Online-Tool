@@ -383,6 +383,20 @@ export function usePlanner() {
     }));
   }, []);
 
+  // ─── Canvas import ────────────────────────────────────
+  const importCanvasCourse = useCallback(async (payload: {
+    courseName: string;
+    category: CourseCategory;
+    items: { title: string; date: string; uid: string }[];
+  }) => {
+    const result = await api.importCanvasCourse(payload);
+    // Refetch both — Canvas import creates a course AND several important dates,
+    // simpler to reload both lists than to hand-merge the new rows in.
+    const [courses, dates] = await Promise.all([api.getCourses(), api.getDates()]);
+    setState((prev) => ({ ...prev, courses, importantDates: dates }));
+    return result;
+  }, []);
+
   return {
     state,
     loading,
@@ -410,5 +424,6 @@ export function usePlanner() {
     addReview,
     addImportantDate,
     removeImportantDate,
+    importCanvasCourse,
   };
 }
