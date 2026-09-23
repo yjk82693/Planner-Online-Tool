@@ -50,6 +50,7 @@ export default function Home() {
     addImportantDate,
     removeImportantDate,
     importCanvasCourse,
+    addDebt,
   } = usePlanner();
 
   useEffect(() => {
@@ -276,6 +277,7 @@ export default function Home() {
               <TodoList
                 todos={state.todos}
                 importantDates={state.importantDates}
+                courses={state.courses}
                 onAdd={addTodo}
                 onToggle={toggleTodo}
                 onRemove={removeTodo}
@@ -319,6 +321,7 @@ export default function Home() {
                 onAdd={addShopItem}
                 onRemove={removeShopItem}
                 onEdit={editShopItem}
+                onAddDebt={addDebt}
               />
             </div>
           )}

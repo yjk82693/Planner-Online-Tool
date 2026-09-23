@@ -145,7 +145,7 @@ export function usePlanner() {
       await api.addPointLog(newLog.date, newLog.points, newLog.type, newLog.reason);
     }
 
-    const newTotal = Math.max(0, state.totalPoints + (wasCompleted ? -1 : 1));
+    const newTotal = state.totalPoints + (wasCompleted ? -1 : 1);
     setState((prev) => ({
       ...prev,
       mandal: { ...prev.mandal, subGoals },
@@ -158,7 +158,9 @@ export function usePlanner() {
   // ─── Shop ─────────────────────────────────────────────
   const buyItem = useCallback(async (itemId: string) => {
     const item = state.shopItems.find((s) => s.id === itemId);
-    if (!item || state.totalPoints < item.cost) return;
+    // Blocked entirely while in debt (negative balance), regardless of item cost,
+    // until earning points brings the balance back to 0 or above.
+    if (!item || state.totalPoints < 0 || state.totalPoints < item.cost) return;
     const log = {
       date: new Date().toISOString(),
       points: item.cost,
@@ -172,6 +174,24 @@ export function usePlanner() {
     }));
     await api.addPointLog(log.date, log.points, log.type, log.reason);
   }, [state]);
+
+  // Creates a debt: immediately subtracts `amount` from the balance, allowed
+  // to go negative. Earning points afterward reduces the debt back toward 0;
+  // spending stays blocked (see buyItem) until it does.
+  const addDebt = useCallback(async (reason: string, amount: number) => {
+    const log = {
+      date: new Date().toISOString(),
+      points: amount,
+      type: "spent" as const,
+      reason: `[Debt] ${reason}`,
+    };
+    setState((prev) => ({
+      ...prev,
+      totalPoints: prev.totalPoints - amount,
+      pointLogs: [...prev.pointLogs, log],
+    }));
+    await api.addPointLog(log.date, log.points, log.type, log.reason);
+  }, []);
 
   const addShopItem = useCallback(async (name: string, cost: number) => {
     const newItem = await api.addShopItem(name, cost);
@@ -262,7 +282,7 @@ export function usePlanner() {
 
     setState((prev) => ({
       ...prev,
-      totalPoints: Math.max(0, prev.totalPoints + pointDelta),
+      totalPoints: prev.totalPoints + pointDelta,
       pointLogs: [...filteredLogs, ...newEarnedLogs, ...newSpentLogs],
       dailyLogs: [
         ...prev.dailyLogs.filter((l) => l.date !== log.date),
@@ -405,6 +425,7 @@ export function usePlanner() {
     setTaskText,
     toggleTask,
     buyItem,
+    addDebt,
     addShopItem,
     removeShopItem,
     editShopItem,

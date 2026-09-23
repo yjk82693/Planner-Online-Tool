@@ -1,7 +1,22 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Button, Input, Collapse, Checkbox, Tag, Typography, Empty, Tabs, Badge, Modal, Card, Alert, Spin } from "antd";
+import {
+  Button,
+  Input,
+  Collapse,
+  Checkbox,
+  Tag,
+  Typography,
+  Empty,
+  Tabs,
+  Badge,
+  Modal,
+  Card,
+  Alert,
+  Spin,
+} from "antd";
+import { CheckCircleOutlined, DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import { Course, CourseCategory, CourseAssignment } from "@/types/mandal";
 import { api } from "@/lib/api";
 
@@ -29,6 +44,36 @@ interface Props {
   }) => Promise<unknown>;
 }
 
+function SectionInput({
+  placeholder,
+  onSubmit,
+}: {
+  placeholder: string;
+  onSubmit: (text: string) => void;
+}) {
+  const [value, setValue] = useState("");
+  const submit = () => {
+    if (!value.trim()) return;
+    onSubmit(value.trim());
+    setValue("");
+  };
+  return (
+    <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
+      <Input
+        size="small"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder={placeholder}
+        onPressEnter={submit}
+        style={{ borderRadius: "6px" }}
+      />
+      <Button size="small" icon={<PlusOutlined />} onClick={submit}>
+        Add
+      </Button>
+    </div>
+  );
+}
+
 function CourseCard({
   course,
   onComplete,
@@ -46,136 +91,114 @@ function CourseCard({
   onAddContent: (courseId: string, text: string) => void;
   onAddReview: (courseId: string, text: string) => void;
 }) {
-  const [assignmentText, setAssignmentText] = useState("");
-  const [contentText, setContentText] = useState("");
-  const [reviewText, setReviewText] = useState("");
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
       <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
         {course.status === "in-progress" && (
-          <Button size="small" type="primary" onClick={() => onComplete(course.id)}>
+          <Button
+            size="small"
+            type="primary"
+            icon={<CheckCircleOutlined />}
+            onClick={() => onComplete(course.id)}
+          >
             Mark complete
           </Button>
         )}
-        <Button size="small" danger onClick={() => onRemove(course.id)}>Remove</Button>
+        <Button size="small" danger icon={<DeleteOutlined />} onClick={() => onRemove(course.id)}>
+          Remove
+        </Button>
       </div>
 
-      <div>
-        <Text strong style={{ fontSize: "12px", color: "#888", display: "block", marginBottom: "6px" }}>
-          Assignments
-        </Text>
-        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+      <Card
+        size="small"
+        title={<Text strong style={{ fontSize: "12px", color: "#888" }}>Assignments</Text>}
+        style={{ borderRadius: "8px" }}
+        styles={{ body: { padding: "12px" } }}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          {course.assignments.length === 0 && (
+            <Text type="secondary" style={{ fontSize: "12px" }}>No assignments yet</Text>
+          )}
           {course.assignments.map((a: CourseAssignment) => (
-            <div key={a.id} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <div
+              key={a.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                padding: "8px 12px",
+                border: "0.5px solid #f0f0f0",
+                borderRadius: "8px",
+                background: a.completed ? "#fafafa" : "#fff",
+              }}
+            >
               <Checkbox
                 checked={a.completed}
                 onChange={() => onToggleAssignment(course.id, a.id)}
               />
               <Text
                 style={{
-                  fontSize: "12px",
+                  flex: 1,
+                  fontSize: "13px",
                   textDecoration: a.completed ? "line-through" : "none",
                   color: a.completed ? "#aaa" : "#333",
                 }}
               >
                 {a.text}
               </Text>
+              {a.dueDate && (
+                <Tag color={a.completed ? "default" : "blue"} style={{ fontSize: "11px" }}>
+                  Due {new Date(a.dueDate).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                </Tag>
+              )}
             </div>
           ))}
-          <div style={{ display: "flex", gap: "6px", marginTop: "4px" }}>
-            <Input
-              size="small"
-              value={assignmentText}
-              onChange={(e) => setAssignmentText(e.target.value)}
-              placeholder="Add assignment..."
-              onPressEnter={() => {
-                if (!assignmentText.trim()) return;
-                onAddAssignment(course.id, assignmentText.trim());
-                setAssignmentText("");
-              }}
-            />
-            <Button
-              size="small"
-              onClick={() => {
-                if (!assignmentText.trim()) return;
-                onAddAssignment(course.id, assignmentText.trim());
-                setAssignmentText("");
-              }}
-            >
-              Add
-            </Button>
-          </div>
+          <SectionInput
+            placeholder="Add assignment..."
+            onSubmit={(text) => onAddAssignment(course.id, text)}
+          />
         </div>
-      </div>
+      </Card>
 
-      <div>
-        <Text strong style={{ fontSize: "12px", color: "#888", display: "block", marginBottom: "6px" }}>
-          Course contents
-        </Text>
+      <Card
+        size="small"
+        title={<Text strong style={{ fontSize: "12px", color: "#888" }}>Course contents</Text>}
+        style={{ borderRadius: "8px" }}
+        styles={{ body: { padding: "12px" } }}
+      >
         <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+          {course.contents.length === 0 && (
+            <Text type="secondary" style={{ fontSize: "12px" }}>No topics added yet</Text>
+          )}
           {course.contents.map((c, i) => (
-            <Text key={i} style={{ fontSize: "12px" }}>• {c}</Text>
+            <Text key={i} style={{ fontSize: "13px" }}>• {c}</Text>
           ))}
-          <div style={{ display: "flex", gap: "6px", marginTop: "4px" }}>
-            <Input
-              size="small"
-              value={contentText}
-              onChange={(e) => setContentText(e.target.value)}
-              placeholder="Add topic/module..."
-              onPressEnter={() => {
-                if (!contentText.trim()) return;
-                onAddContent(course.id, contentText.trim());
-                setContentText("");
-              }}
-            />
-            <Button
-              size="small"
-              onClick={() => {
-                if (!contentText.trim()) return;
-                onAddContent(course.id, contentText.trim());
-                setContentText("");
-              }}
-            >
-              Add
-            </Button>
-          </div>
+          <SectionInput
+            placeholder="Add topic/module..."
+            onSubmit={(text) => onAddContent(course.id, text)}
+          />
         </div>
-      </div>
+      </Card>
 
-      <div>
-        <Text strong style={{ fontSize: "12px", color: "#888", display: "block", marginBottom: "6px" }}>
-          Review notes
-        </Text>
+      <Card
+        size="small"
+        title={<Text strong style={{ fontSize: "12px", color: "#888" }}>Review notes</Text>}
+        style={{ borderRadius: "8px" }}
+        styles={{ body: { padding: "12px" } }}
+      >
         <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+          {course.reviews.length === 0 && (
+            <Text type="secondary" style={{ fontSize: "12px" }}>No review notes yet</Text>
+          )}
           {course.reviews.map((r, i) => (
-            <Text key={i} style={{ fontSize: "12px" }}>• {r}</Text>
+            <Text key={i} style={{ fontSize: "13px" }}>• {r}</Text>
           ))}
-          <div style={{ display: "flex", gap: "6px", marginTop: "4px" }}>
-            <Input
-              size="small"
-              value={reviewText}
-              onChange={(e) => setReviewText(e.target.value)}
-              placeholder="Add review note..."
-              onPressEnter={() => {
-                if (!reviewText.trim()) return;
-                onAddReview(course.id, reviewText.trim());
-                setReviewText("");
-              }}
-            />
-            <Button
-              size="small"
-              onClick={() => {
-                if (!reviewText.trim()) return;
-                onAddReview(course.id, reviewText.trim());
-                setReviewText("");
-              }}
-            >
-              Add
-            </Button>
-          </div>
+          <SectionInput
+            placeholder="Add review note..."
+            onSubmit={(text) => onAddReview(course.id, text)}
+          />
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -266,14 +289,14 @@ function CanvasImportSection({
   if (loadingFeedUrl) return null;
 
   return (
-    <Card size="small" style={{ background: "#fafafa" }}>
+    <Card size="small" style={{ background: "#fafafa", borderRadius: "8px" }}>
       {!feedUrl ? (
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           <Text strong style={{ fontSize: "13px" }}>Connect Canvas</Text>
           <Text type="secondary" style={{ fontSize: "12px" }}>
             Paste your Canvas calendar feed URL to import courses and assignment due dates.
-            Find it in Canvas under Calendar → "Calendar Feed" (bottom-right sidebar).
-            It's a private link — keep it out of anything public.
+            Find it in Canvas under Calendar → &quot;Calendar Feed&quot; (bottom-right sidebar).
+            It&apos;s a private link — keep it out of anything public.
           </Text>
           <div style={{ display: "flex", gap: "8px" }}>
             <Input
@@ -416,7 +439,7 @@ export default function CourseTracker({
             />
           ),
         }))}
-        style={{ background: "#fff" }}
+        style={{ background: "#fff", borderRadius: "8px" }}
       />
     );
   };
@@ -449,7 +472,7 @@ export default function CourseTracker({
           onChange={(e) => setNewName(e.target.value)}
           placeholder="Course name..."
           onPressEnter={handleAdd}
-          style={{ flex: 1 }}
+          style={{ flex: 1, borderRadius: "6px" }}
         />
         <select
           value={newCategory}
@@ -464,7 +487,9 @@ export default function CourseTracker({
           <option value="academic">Academic</option>
           <option value="self-study">Self-study</option>
         </select>
-        <Button type="primary" onClick={handleAdd}>Add</Button>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+          Add
+        </Button>
       </div>
 
       <Tabs items={tabItems} />

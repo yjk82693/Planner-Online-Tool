@@ -2,13 +2,22 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { Button, Input, Checkbox, Tag, Typography, Empty, Select, Card } from "antd";
-import { TodoItem, ImportantDate } from "@/types/mandal";
+import { PlusOutlined } from "@ant-design/icons";
+import { TodoItem, ImportantDate, Course } from "@/types/mandal";
 
 const { Text } = Typography;
+
+function getLocalDateKey(d: Date = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 interface Props {
   todos: TodoItem[];
   importantDates: ImportantDate[];
+  courses: Course[];
   onAdd: (text: string, priority: number) => void;
   onToggle: (id: string) => void;
   onRemove: (id: string) => void;
@@ -17,19 +26,12 @@ interface Props {
 
 const CARRY_OVER_SHOWN_KEY = "carryOverBannerShownDate";
 
-export default function TodoList({ todos, importantDates, onAdd, onToggle, onRemove, onSetPriority }: Props) {
+export default function TodoList({ todos, importantDates, courses, onAdd, onToggle, onRemove, onSetPriority }: Props) {
   const [newText, setNewText] = useState("");
   const [newPriority, setNewPriority] = useState<number>(0);
   const [carryOverSelections, setCarryOverSelections] = useState<Record<string, { selected: boolean; priority: number }>>({});
 
-  function getLocalDateKey(d: Date = new Date()): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-const todayKey = getLocalDateKey();
+  const todayKey = getLocalDateKey();
 
   const [carryOverDone, setCarryOverDone] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -49,6 +51,27 @@ const todayKey = getLocalDateKey();
       localStorage.setItem(CARRY_OVER_SHOWN_KEY, todayKey);
     }
   }, [showCarryOver, todayKey]);
+
+  // Pending assignments from in-progress courses, as suggestions to pull
+  // into today's list — excludes ones already added as a todo (matched by text).
+  const assignmentSuggestions = useMemo(() => {
+    const existingTexts = new Set(todos.map((t) => t.text));
+    const suggestions: { key: string; courseId: string; courseName: string; text: string; dueDate?: string }[] = [];
+    for (const course of courses) {
+      if (course.status !== "in-progress") continue;
+      for (const a of course.assignments) {
+        if (a.completed) continue;
+        const text = `${course.name}: ${a.text}`;
+        if (existingTexts.has(text)) continue;
+        suggestions.push({ key: a.id, courseId: course.id, courseName: course.name, text, dueDate: a.dueDate });
+      }
+    }
+    return suggestions.sort((a, b) => {
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+    });
+  }, [courses, todos]);
 
   const handleCarryOverToggle = (id: string) => {
     setCarryOverSelections((prev) => ({
@@ -226,6 +249,47 @@ const todayKey = getLocalDateKey();
                   </div>
                 );
               })}
+            </div>
+          </Card>
+        )}
+
+        {assignmentSuggestions.length > 0 && (
+          <Card
+            size="small"
+            style={{ border: "1px dashed #1677ff", borderRadius: "8px", background: "#f0f7ff" }}
+            title={
+              <Text strong style={{ color: "#1677ff", fontSize: "13px" }}>
+                From your courses — add to today&apos;s list?
+              </Text>
+            }
+          >
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              {assignmentSuggestions.map((s) => (
+                <div
+                  key={s.key}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    padding: "6px 8px",
+                    borderRadius: "6px",
+                  }}
+                >
+                  <Text style={{ flex: 1, fontSize: "12px" }}>{s.text}</Text>
+                  {s.dueDate && (
+                    <Tag color="blue" style={{ fontSize: "11px" }}>
+                      Due {new Date(s.dueDate).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                    </Tag>
+                  )}
+                  <Button
+                    size="small"
+                    icon={<PlusOutlined />}
+                    onClick={() => onAdd(s.text, 0)}
+                  >
+                    Add
+                  </Button>
+                </div>
+              ))}
             </div>
           </Card>
         )}

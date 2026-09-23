@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Input, InputNumber, List, Tag, Typography, Empty } from "antd";
+import { Button, Input, InputNumber, List, Tag, Typography, Empty, Alert } from "antd";
 import { ShopItem } from "@/types/mandal";
 
 const { Text } = Typography;
@@ -13,20 +13,33 @@ interface Props {
   onAdd: (name: string, cost: number) => void;
   onRemove: (itemId: string) => void;
   onEdit: (itemId: string, name: string, cost: number) => void;
+  onAddDebt: (reason: string, amount: number) => void;
 }
 
-export default function Shop({ items, totalPoints, onBuy, onAdd, onRemove, onEdit }: Props) {
+export default function Shop({ items, totalPoints, onBuy, onAdd, onRemove, onEdit, onAddDebt }: Props) {
   const [newName, setNewName] = useState("");
   const [newCost, setNewCost] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editCost, setEditCost] = useState<number | null>(null);
 
+  const [debtReason, setDebtReason] = useState("");
+  const [debtAmount, setDebtAmount] = useState<number | null>(null);
+
+  const inDebt = totalPoints < 0;
+
   const handleAdd = () => {
     if (!newName.trim() || !newCost || newCost <= 0) return;
     onAdd(newName.trim(), newCost);
     setNewName("");
     setNewCost(null);
+  };
+
+  const handleAddDebt = () => {
+    if (!debtReason.trim() || !debtAmount || debtAmount <= 0) return;
+    onAddDebt(debtReason.trim(), debtAmount);
+    setDebtReason("");
+    setDebtAmount(null);
   };
 
   const startEdit = (item: ShopItem) => {
@@ -59,13 +72,24 @@ export default function Shop({ items, totalPoints, onBuy, onAdd, onRemove, onEdi
           alignItems: "center",
           justifyContent: "space-between",
           padding: "16px",
-          background: "#f5f5f5",
+          background: inDebt ? "#fff1f0" : "#f5f5f5",
           borderRadius: "8px",
         }}
       >
         <Text type="secondary">Available points</Text>
-        <Text strong style={{ fontSize: "20px" }}>{totalPoints} C$</Text>
+        <Text strong style={{ fontSize: "20px", color: inDebt ? "#cf1322" : undefined }}>
+          {totalPoints} C$
+        </Text>
       </div>
+
+      {inDebt && (
+        <Alert
+          type="warning"
+          showIcon
+          message="In debt"
+          description="Spending is paused until your balance reaches 0 C$ or above. Earning points chips away at the debt."
+        />
+      )}
 
       {sorted.length === 0 ? (
         <Empty description="No rewards yet — add one below" />
@@ -73,7 +97,7 @@ export default function Shop({ items, totalPoints, onBuy, onAdd, onRemove, onEdi
         <List
           dataSource={sorted}
           renderItem={(item) => {
-            const canAfford = totalPoints >= item.cost;
+            const canAfford = !inDebt && totalPoints >= item.cost;
             const isEditing = editingId === item.id;
 
             return (
@@ -165,6 +189,41 @@ export default function Shop({ items, totalPoints, onBuy, onAdd, onRemove, onEdi
         <Button type="primary" onClick={handleAdd}>
           Add
         </Button>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "8px",
+          paddingTop: "16px",
+          borderTop: "1px solid #f0f0f0",
+        }}
+      >
+        <Text strong style={{ fontSize: "13px", color: "#888" }}>Add debt</Text>
+        <Text type="secondary" style={{ fontSize: "12px" }}>
+          For something you spent outside the shop, or overspent on. Subtracts immediately —
+          your balance can go negative, and spending stays paused until you earn it back.
+        </Text>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <Input
+            value={debtReason}
+            onChange={(e) => setDebtReason(e.target.value)}
+            placeholder="What was it for?"
+            style={{ flex: 2 }}
+            onPressEnter={handleAddDebt}
+          />
+          <InputNumber
+            value={debtAmount}
+            onChange={(val) => setDebtAmount(val)}
+            placeholder="Amount"
+            min={1}
+            style={{ flex: 1 }}
+          />
+          <Button danger onClick={handleAddDebt}>
+            Add debt
+          </Button>
+        </div>
       </div>
     </div>
   );
