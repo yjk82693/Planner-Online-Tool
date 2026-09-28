@@ -56,13 +56,21 @@ export default function TodoList({ todos, importantDates, courses, onAdd, onTogg
   // into today's list — excludes ones already added as a todo (matched by text).
   const assignmentSuggestions = useMemo(() => {
     const existingTexts = new Set(todos.map((t) => t.text));
+    // Anything already checked off in ANY course entry (even a duplicate import
+    // of the same course) should never be suggested again.
+    const completedTexts = new Set<string>();
+    for (const course of courses) {
+      for (const a of course.assignments) {
+        if (a.completed) completedTexts.add(`${course.name}: ${a.text}`);
+      }
+    }
     const suggestions: { key: string; courseId: string; courseName: string; text: string; dueDate?: string }[] = [];
     for (const course of courses) {
       if (course.status !== "in-progress") continue;
       for (const a of course.assignments) {
         if (a.completed) continue;
         const text = `${course.name}: ${a.text}`;
-        if (existingTexts.has(text)) continue;
+        if (existingTexts.has(text) || completedTexts.has(text)) continue;
         suggestions.push({ key: a.id, courseId: course.id, courseName: course.name, text, dueDate: a.dueDate });
       }
     }
