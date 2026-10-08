@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useCanvasAutoSync } from "@/hooks/useCanvasAutoSync";
 import { Layout, Menu, Typography, Badge, Modal, Button } from "antd";
 import { useRouter } from "next/navigation";
 import { usePlanner } from "@/hooks/usePlanner";
@@ -19,6 +20,7 @@ const { Title, Text } = Typography;
 type Tab = "edit" | "mandal" | "todo" | "courses" | "dates" | "shop" | "tracker";
 
 export default function Home() {
+  useCanvasAutoSync();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("edit");
   const [warningShown, setWarningShown] = useState(false);

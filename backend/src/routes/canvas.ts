@@ -100,4 +100,73 @@ router.post("/import", async (req: AuthRequest, res) => {
   return res.json({ ok: true, courseId: course.id, imported: items.length });
 });
 
+router.post("/auto-sync", async (req: AuthRequest, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.userId! } });
+    if (!user || !user.canvasFeedUrl) return res.json({ ok: true, added: 0 });
+
+    const ical = require("node-ical");
+    const data = await ical.async.fromURL(user.canvasFeedUrl);
+    const fmt = (d: any) =>
+      new Date(d).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+    const today = fmt(new Date());
+
+    const byCourse = new Map<string, { uid: string; title: string; date: string }[]>();
+    for (const ev of Object.values(data) as any[]) {
+      if (ev.type !== "VEVENT" || !ev.start || !ev.summary) continue;
+      const summary = String(ev.summary);
+      const open = summary.lastIndexOf(" [");
+      if (open === -1) continue;
+      const title = summary.slice(0, open).trim();
+      const code = summary.slice(open + 2).split(",")[0].replace(/\]$/, "").trim();
+      const date = fmt(ev.start);
+      if (!code || date < today) continue;
+      if (!byCourse.has(code)) byCourse.set(code, []);
+      byCourse.get(code)!.push({ uid: String(ev.uid), title, date });
+    }
+
+    let added = 0;
+    for (const [code, items] of byCourse) {
+      const course = await prisma.course.findFirst({
+        where: { userId: req.userId!, name: code },
+      });
+      if (!course) continue;
+
+      const current = JSON.parse(course.assignments || "[]") as any[];
+      const knownIds = new Set(current.map((a) => a.id));
+      const knownTexts = new Set(current.map((a) => String(a.text).trim().toLowerCase()));
+      const fresh = items.filter(
+        (i) => !knownIds.has(i.uid) && !knownTexts.has(i.title.trim().toLowerCase())
+      );
+      if (fresh.length === 0) continue;
+
+      const merged = [
+        ...current,
+        ...fresh.map((i) => ({ id: i.uid, text: i.title, completed: false, dueDate: i.date })),
+      ];
+      await prisma.course.update({
+        where: { id: course.id },
+        data: { assignments: JSON.stringify(merged) },
+      });
+
+      for (const i of fresh) {
+        const title = `${code}: ${i.title}`;
+        const dup = await prisma.importantDate.findFirst({
+          where: { userId: req.userId!, title, date: i.date },
+        });
+        if (!dup) {
+          await prisma.importantDate.create({
+            data: { userId: req.userId!, title, date: i.date, warningDays: 7 },
+          });
+        }
+      }
+      added += fresh.length;
+    }
+    return res.json({ ok: true, added });
+  } catch (err) {
+    console.error("canvas auto-sync failed", err);
+    return res.status(500).json({ ok: false });
+  }
+});
+
 export default router;
