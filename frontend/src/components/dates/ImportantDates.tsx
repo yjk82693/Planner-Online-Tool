@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
-import { Calendar, Modal, Form, Input, InputNumber, TimePicker, Select, Badge, Button, Popconfirm, Typography } from "antd";
-import { DeleteOutlined } from "@ant-design/icons";
+import { Calendar, Modal, Form, Input, InputNumber, TimePicker, Select, Badge, Button, Popconfirm, Typography, Empty, message } from "antd";
+import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import type { Dayjs } from "dayjs";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
@@ -52,6 +52,7 @@ async function createImportantDate(payload: Omit<ImportantDate, "id">): Promise<
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(payload),
   });
+  if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 
@@ -70,6 +71,8 @@ function daysLeft(d: ImportantDate) {
 
 const MAX_BADGES_PER_CELL = 2;
 
+type Mode = "list" | "add";
+
 export default function ImportantDatesCalendar({
   initialDates = [],
 }: {
@@ -77,6 +80,8 @@ export default function ImportantDatesCalendar({
 }) {
   const [dates, setDates] = useState<ImportantDate[]>(initialDates);
   const [modalOpen, setModalOpen] = useState(false);
+  const [mode, setMode] = useState<Mode>("list");
+  const [saving, setSaving] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Dayjs | null>(null);
   const [form] = Form.useForm();
 
@@ -93,26 +98,52 @@ export default function ImportantDatesCalendar({
     return map;
   }, [dates]);
 
-  function handleSelect(value: Dayjs) {
+  const selectedKey = selectedDate?.format("YYYY-MM-DD") ?? "";
+  const dayEvents = useMemo(
+    () =>
+      (byDay.get(selectedKey) ?? [])
+        .slice()
+        .sort((a, b) => toLocalMoment(a).valueOf() - toLocalMoment(b).valueOf()),
+    [byDay, selectedKey]
+  );
+
+  function handleSelect(value: Dayjs, info?: { source?: string }) {
+    // Ignore month/year navigation clicks, only react to real day clicks
+    if (info?.source && info.source !== "date") return;
     setSelectedDate(value);
-    form.resetFields();
-    form.setFieldsValue({ warningDays: 7, timezone: "Asia/Seoul" });
+    setMode("list");
     setModalOpen(true);
   }
 
+  function openAdd() {
+    form.resetFields();
+    form.setFieldsValue({ warningDays: 7, timezone: "Asia/Seoul" });
+    setMode("add");
+  }
+
   async function handleAdd() {
-    const values = await form.validateFields();
-    const payload: Omit<ImportantDate, "id"> = {
-      title: values.title,
-      description: values.description,
-      date: selectedDate!.format("YYYY-MM-DD"),
-      time: values.time ? (values.time as Dayjs).format("HH:mm") : undefined,
-      timezone: values.time ? values.timezone : undefined,
-      warningDays: values.warningDays ?? 7,
-    };
-    const created = await createImportantDate(payload);
-    setDates((prev) => [...prev, created]);
-    setModalOpen(false);
+    try {
+      const values = await form.validateFields();
+      const rawTime = values.time ?? form.getFieldValue("time");
+      const time = rawTime ? dayjs(rawTime).format("HH:mm") : undefined;
+      const payload: Omit<ImportantDate, "id"> = {
+        title: values.title,
+        description: values.description,
+        date: selectedDate!.format("YYYY-MM-DD"),
+        time,
+        timezone: time ? values.timezone || "Asia/Seoul" : undefined,
+        warningDays: values.warningDays ?? 7,
+      };
+      setSaving(true);
+      const created = await createImportantDate(payload);
+      setDates((prev) => [...prev, created]);
+      setMode("list");
+    } catch (e) {
+      if ((e as { errorFields?: unknown })?.errorFields) return; // validation error
+      message.error("Could not save the event");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleRemove(id: string) {
@@ -152,6 +183,8 @@ export default function ImportantDatesCalendar({
     );
   }
 
+  const dayLabel = selectedDate?.format("MMM D, YYYY") ?? "";
+
   return (
     <div>
       <div>
@@ -181,7 +214,7 @@ export default function ImportantDatesCalendar({
                     <Text type="secondary">
                       {toLocalMoment(d).format(d.time ? "MMM D, YYYY h:mm A" : "MMM D, YYYY")}
                       {d.time && d.timezone ? ` (from ${d.time} ${d.timezone})` : ""}
-                      {d.description ? ` — ${d.description}` : ""}
+                      {d.description ? ` - ${d.description}` : ""}
                     </Text>
                   </div>
                 </div>
@@ -204,29 +237,87 @@ export default function ImportantDatesCalendar({
       </div>
 
       <Modal
-        title={`Add important date — ${selectedDate?.format("MMM D, YYYY") ?? ""}`}
+        title={mode === "list" ? `Events · ${dayLabel}` : `Add event · ${dayLabel}`}
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
-        onOk={handleAdd}
-        okText="Add"
+        forceRender
+        footer={
+          mode === "list" ? (
+            <Button type="primary" block icon={<PlusOutlined />} onClick={openAdd}>
+              Add event
+            </Button>
+          ) : (
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <Button onClick={() => setMode("list")}>Cancel</Button>
+              <Button type="primary" loading={saving} onClick={handleAdd}>
+                Add
+              </Button>
+            </div>
+          )
+        }
       >
-        <Form form={form} layout="vertical">
-          <Form.Item name="title" label="Title" rules={[{ required: true, message: "Title is required" }]}>
-            <Input placeholder="e.g. Final exam" />
-          </Form.Item>
-          <Form.Item name="description" label="Description (optional)">
-            <Input placeholder="Description" />
-          </Form.Item>
-          <Form.Item name="time" label="Time (optional — leave blank for an all-day date)">
-            <TimePicker format="h:mm A" style={{ width: "100%" }} />
-          </Form.Item>
-          <Form.Item name="timezone" label="Time is in this timezone" initialValue="Asia/Seoul">
-            <Select options={TIMEZONE_OPTIONS} />
-          </Form.Item>
-          <Form.Item name="warningDays" label="Warn how many days before?" initialValue={7}>
-            <InputNumber min={0} max={90} style={{ width: "100%" }} />
-          </Form.Item>
-        </Form>
+        {mode === "list" && (
+          <div>
+            {dayEvents.length === 0 ? (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No events on this day" />
+            ) : (
+              <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                {dayEvents.map((d) => (
+                  <li
+                    key={d.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      gap: 12,
+                      padding: "10px 0",
+                      borderBottom: "1px solid #f0f0f0",
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <Text strong>{d.title}</Text>
+                      <div>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          {d.time ? toLocalMoment(d).format("h:mm A") : "All day"}
+                          {d.time && d.timezone ? ` (from ${d.time} ${d.timezone})` : ""}
+                        </Text>
+                      </div>
+                      {d.description && (
+                        <div>
+                          <Text style={{ fontSize: 12 }}>{d.description}</Text>
+                        </div>
+                      )}
+                    </div>
+                    <Popconfirm title="Remove this event?" onConfirm={() => handleRemove(d.id)}>
+                      <Button danger size="small" icon={<DeleteOutlined />} />
+                    </Popconfirm>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {/* Form stays mounted (forceRender) so values and the TimePicker always bind to `form` */}
+        <div style={{ display: mode === "add" ? "block" : "none" }}>
+          <Form form={form} layout="vertical" preserve>
+            <Form.Item name="title" label="Title" rules={[{ required: true, message: "Title is required" }]}>
+              <Input placeholder="e.g. Final exam" />
+            </Form.Item>
+            <Form.Item name="description" label="Description (optional)">
+              <Input placeholder="Description" />
+            </Form.Item>
+            <Form.Item name="time" label="Time (optional, leave blank for an all-day date)">
+              <TimePicker format="h:mm A" use12Hours style={{ width: "100%" }} />
+            </Form.Item>
+            <Form.Item name="timezone" label="Time is in this timezone" initialValue="Asia/Seoul">
+              <Select options={TIMEZONE_OPTIONS} />
+            </Form.Item>
+            <Form.Item name="warningDays" label="Warn how many days before?" initialValue={7}>
+              <InputNumber min={0} max={90} style={{ width: "100%" }} />
+            </Form.Item>
+          </Form>
+        </div>
       </Modal>
     </div>
   );
