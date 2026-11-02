@@ -10,8 +10,17 @@ import canvasRouter from "./routes/canvas";
 import shopRouter from "./routes/shop";
 import logsRouter from "./routes/logs";
 import authRouter from "./routes/auth";
+import { getJwtSecret } from "./lib/jwtSecret";
 
 dotenv.config();
+
+// Stop at startup instead of running with no signing key.
+try {
+  getJwtSecret();
+} catch (err) {
+  console.error(`[startup] ${(err as Error).message}`);
+  process.exit(1);
+}
 
 const app = express();
 app.use(cors({

@@ -53,6 +53,8 @@ npx prisma db push
 npm run dev
 ```
 
+Set `JWT_SECRET` in `backend/.env` to a long random string (for example the output of `openssl rand -hex 32`). The backend refuses to start without it.
+
 **3. Set up the frontend**
 ```bash
 cd frontend
